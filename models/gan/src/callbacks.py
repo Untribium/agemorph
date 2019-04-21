@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import io
+from .utils import normalize
 from keras.callbacks import Callback, TensorBoard
 from PIL import Image
 
@@ -67,8 +68,9 @@ class TensorBoardImage(TensorBoard):
 
 class TensorBoardVal(TensorBoardImage):
 
-    def __init__(self, gen_model, cri_model, data, steps, batch_size, kl_dummy, **kwargs):
+    def __init__(self, cri_model, gen_model, data, freq, steps, batch_size, kl_dummy, **kwargs):
         self.data = data
+        self.freq = freq
         self.steps = steps
         self.gen_model = gen_model
         self.cri_model = cri_model
@@ -77,14 +79,17 @@ class TensorBoardVal(TensorBoardImage):
 
         # critic labels 
         self.real = np.ones((batch_size, 1)) * (-1) # real labels
-        self,fake = np.ones((batch_size, 1))        # fake labels
+        self.fake = np.ones((batch_size, 1))        # fake labels
         self.avgd = np.ones((batch_size, 1))        # dummy labels for gradient penalty
 
         super(TensorBoardVal, self).__init__(**kwargs)
 
     
     def on_epoch_end(self, epoch):
-        
+ 
+        if epoch % self.freq != 0:
+            return
+
         # scalar summaries
         cri_logs_valid = np.zeros((self.steps, len(self.cri_model.outputs)+1))
         gen_logs_valid = np.zeros((self.steps, len(self.gen_model.outputs)+1))
@@ -135,6 +140,13 @@ class TensorBoardVal(TensorBoardImage):
 
         flow = np.concatenate([flow_mean, flow_std, flow_ti], axis=3)[:3]
         flow = np.concatenate(flow, axis=0)[:, 40, :, :]
+        
+        # flow mean and std in separate images for each dim
+        channels = [imgs[0], flow_mean, flow_std, flow_ti]
+        flow_all = np.concatenate(channels, axis=4)
+        flow_all = np.moveaxis(flow_all, 4, 0)
+        flow_all = np.concatenate(flow_all, axis=3)[:3]
+        flow_all = np.concatenate(flow_all, axis=0)[:, 40, :, None]
 
         img_logs = {
             'xr_yr_yf': img,

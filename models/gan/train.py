@@ -18,7 +18,7 @@ from keras.utils import multi_gpu_model, Progbar
 
 # project imports
 from src import datagenerators, networks, losses
-from src.callbacks import TensorBoardImage
+from src.callbacks import TensorBoardExt, TensorBoardVal
 from src.utils import normalize, convert_delta
 
 
@@ -49,12 +49,14 @@ def train(csv_path,
     
     """
     model training function
+    :param csv_path: path to data csv (img paths, labels)
+    :param tag: tag for the run, added to run_dir
     :param gpu_id: integer specifying the gpu to use
     :param lr: learning rate
     :param epochs: number of training iterations
-    :param prior_lambda: the prior_lambda, the scalar in front of the smoothing laplacian, in MICCAI paper
     :param steps_per_epoch: frequency with which to save models
     :param batch_size: Optional, default of 1. can be larger, depends on GPU memory and volume size
+    :param prior_lambda: the prior_lambda, the scalar in front of the smoothing laplacian, in MICCAI paper
     """
 
     model_config = locals()
@@ -118,6 +120,7 @@ def train(csv_path,
     # prepare the model
     with tf.device(gpu):
         
+        # load models
         loss_class = losses.GANLosses(prior_lambda=prior_lambda, flow_shape=flow_shape)
 
         cri_optimizer = Adam(lr=lr, beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
@@ -141,14 +144,7 @@ def train(csv_path,
         # save inital models
         cri_model.save(cri_model_save_path.format(0))
         gen_model.save(gen_model_save_path.format(0))
-        
-        # tboard callbacks
-        tboard_train = TensorBoardImage(log_dir=model_dir)
-        tboard_train.set_model(gen_model)
-
-        tboard_valid = TensorBoardImage(log_dir=valid_dir)
-        tboard_valid.set_model(gen_model)
-
+       
 
     # data generator
     num_gpus = len(gpu_id.split(','))
@@ -156,12 +152,12 @@ def train(csv_path,
         'batch_size should be a multiple of the nr. of gpus. ' + \
         'Got batch_size %d, %d gpus' % (batch_size, num_gpus)
 
-
+    # load csv
     csv = pd.read_csv(csv_path)
     
     # get max_delta from csv and store in config
     # max_delta and int_steps determine the resolution of the flow integration
-    # e.g. max_delta=6, int_steps=5 results in a resolution of about 4 weeks
+    # e.g. max_delta=6, int_steps=5 results in a resolution of about 5 weeks
     # max_steps = 2**(int_steps+1)-1 = 63, 6 years = 72 months
     max_delta = csv['delta_t'].max()
     model_config['max_delta'] = max_delta
@@ -170,7 +166,7 @@ def train(csv_path,
     img_keys = ['img_path_0', 'img_path_1']
     lbl_keys = ['delta_t']
 
-    # datagens for train and eval
+    # datagens for training and validation
     train_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
                             sample=True, split='train')
@@ -187,16 +183,30 @@ def train(csv_path,
     config_path = os.path.join(model_dir, 'config.pkl')
     pickle.dump(model_config, open(config_path, 'wb'))
 
+
+    # labels for train/predict
+    # dummy tensor for kl loss, must have correct flow shape
+    kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
+   
+    # labels for critic ws loss
+    real = np.ones((batch_size, 1)) * (-1) # real labels
+    fake = np.ones((batch_size, 1))        # fake labels
+    avgd = np.ones((batch_size, 1))        # dummy labels for gradient penalty
+
+ 
+    # tboard callbacks
+    tboard_train = TensorBoardExt(log_dir=model_dir)
+    tboard_train.set_model(gen_model)
+
+    tboard_valid = TensorBoardVal(log_dir=valid_dir, data=valid_data,
+                                  cri_model=cri_model, gen_model=gen_model,
+                                  freq=valid_freq, steps=valid_steps,
+                                  batch_size=batch_size, kl_dummy=kl_dummy)
+    tboard_valid.set_model(gen_model)
+
+
     # fit generator
     with tf.device(gpu):
-
-        # dummy tensor for kl loss, must have correct flow shape
-        kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
-       
-        # critic labels 
-        real = np.ones((batch_size, 1)) * (-1) # real labels
-        fake = np.ones((batch_size, 1))        # fake labels
-        avgd = np.ones((batch_size, 1))        # dummy labels for gradient penalty
 
         abs_step = 0
 
@@ -206,6 +216,7 @@ def train(csv_path,
 
             cri_steps_ep = cri_steps
 
+            # check if retune epoch, if so adjust critic steps
             if epoch % cri_retune_freq == 0:
                 cri_steps_ep = cri_retune_steps
                 print('retuning critic')
@@ -232,104 +243,17 @@ def train(csv_path,
                 # train generator
                 gen_logs = gen_model.train_on_batch(gen_in, gen_true)
 
-                tensorboard_summaries(tboard_train, abs_step, cri_logs, gen_logs)
+                # update tensorboard
+                tboard_train.on_epoch_end(abs_step, cri_logs, gen_logs)
+                tboard_valid.on_epoch_end(abs_step)
+                #tensorboard_summaries(tboard_train, abs_step, cri_logs, gen_logs)
 
                 abs_step += 1
                 progress_bar.add(1)
 
-                if abs_step % valid_freq == 0:
-
-                    # validation
-
-                    cri_logs_valid = np.zeros((valid_steps, len(cri_model.outputs)+1))
-                    gen_logs_valid = np.zeros((valid_steps, len(gen_model.outputs)+1))
-
-                    for v_step in range(valid_steps):
-
-                        imgs, lbls = next(valid_data)
-
-                        cri_in = [imgs[0], imgs[1], lbls[0], lbls[1]]
-                        cri_true = [real, fake, avgd]
-                        cri_logs_valid[v_step] = cri_model.test_on_batch(cri_in, cri_true)
-                        
-                        gen_in = [imgs[0], lbls[0], lbls[1]]
-                        gen_true = [imgs[0], kl_dummy, kl_dummy, real]
-                        gen_logs_valid[v_step] = gen_model.test_on_batch(gen_in, gen_true)
-                    
-                    cri_logs_valid = cri_logs_valid.mean(axis=0).tolist()
-                    gen_logs_valid = gen_logs_valid.mean(axis=0).tolist()
-
-                    tensorboard_summaries(tboard_valid, abs_step, cri_logs_valid, gen_logs_valid)
-
-                    # tensorboard image summaries
-                    yf_gen, flow_gen, flow_ti_gen, _ = gen_model.predict(gen_in)
-
-                    # delta indicator
-                    lin = np.linspace(0, 1, imgs[0].shape[1])
-                    deltas = np.ones_like(imgs[0]) * lin[None, :, None, None, None]
-                    deltas = ((deltas < lbls[0]) * 1.2 - 0.2)[:, :, :, 0:10, :]
-                    
-                    # concat image xr yr yf
-                    img = np.concatenate([imgs[0], imgs[1], yf_gen, deltas], axis=3)[:3]
-                    img = np.concatenate(img, axis=0)[:, 40, :, :]
-
-                    # concat flow mean and flow std
-                    flow_mean = flow_gen[..., :3]
-                    mean_flow_mean = np.abs(flow_mean).mean() # for tb
-                    flow_mean = normalize(flow_mean, axis=0)
-
-                    flow_std = flow_gen[..., 3:]
-                    flow_std = np.exp(flow_std)
-                    mean_flow_std = np.abs(flow_std).mean() # for tb
-                    flow_std = normalize(flow_std, axis=0)
-                    
-                    mean_flow_ti = np.abs(flow_ti_gen).mean() # for tb
-                    flow_ti = normalize(flow_ti_gen, axis=0)
- 
-                    flow = np.concatenate([flow_mean, flow_std, flow_ti], axis=3)[:3]
-                    flow = np.concatenate(flow, axis=0)[:, 40, :, :]
-
-                    # flow mean and std in separate images for each dim
-                    channels = [imgs[0], flow_mean, flow_std, flow_ti]
-                    flow_all = np.concatenate(channels, axis=4)
-                    flow_all = np.moveaxis(flow_all, 4, 0)
-                    flow_all = np.concatenate(flow_all, axis=3)[:3]
-                    flow_all = np.concatenate(flow_all, axis=0)[:, 40, :, None]
-
-                    img_logs_valid = {
-                        'xr_yr_yf': img,
-                        'flow_rgb': flow,
-                        'flow': flow_all
-                    }
-
-                    img_meta_valid = {
-                        'gen_flow_ti_mean': mean_flow_ti,
-                        'gen_flow_mean': mean_flow_mean,
-                        'gen_flow_std': mean_flow_std,
-                    }
-
-                    tboard_valid.on_epoch_end(abs_step, img_meta_valid, img_logs_valid)
-
             if epoch % 5 == 0:
                 cri_model.save(cri_model_save_path.format(epoch))
                 gen_model.save(gen_model_save_path.format(epoch))
-
-
-def tensorboard_summaries(callback, abs_step, cri_logs, gen_logs):
-    
-    summaries = {
-        'cri_loss_total':   cri_logs[0],
-        'cri_loss_ws_real': cri_logs[1],
-        'cri_loss_ws_fake': cri_logs[2],
-        'cri_loss_gp':      cri_logs[3],
-        'gen_loss_total':   gen_logs[0],
-        'gen_loss_l1':      gen_logs[1],
-        'gen_loss_kl':      gen_logs[2],
-        'gen_loss_ti':      gen_logs[3],
-        'gen_loss_ws':      gen_logs[4]
-    }
-
-    callback.on_epoch_end(abs_step, summaries)
 
 
 if __name__ == "__main__":
@@ -373,7 +297,7 @@ if __name__ == "__main__":
     parser.add_argument("--cri_loss_weights", type=float, nargs="+",
                         dest="cri_loss_weights", default=[1, 1, 10])
     parser.add_argument("--int_steps", type=int,
-                        dest="int_steps", default=7,
+                        dest="int_steps", default=5,
                         help="number of integration steps in scaling and squaring")
     parser.add_argument("--steps_per_epoch", type=int,
                         dest="steps_per_epoch", default=100,
