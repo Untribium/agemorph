@@ -149,7 +149,7 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                 delta = deltas[i][0]
 
                 img_name = str(img_id) + '_{img_type}_'
-                img_name += str(delta) + '_.nii.gz'
+                img_name += '{:04.1f}.nii.gz'.format(delta)
 
                 img_path = os.path.join(out_dir, img_name)
 

@@ -12,7 +12,7 @@ import pandas as pd
 import nibabel as nib
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
-                                shuffle=True, n_epochs=None, verbose=False):
+                    shuffle=True, weights=None, n_epochs=None, verbose=False):
     """
     batch generator from csv
     Arguments:
@@ -28,6 +28,10 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                 which data split to use, expects 'split' column in csv
     sample:     bool
                 sample each batch from all samples, otherwise shuffle then split
+    shuffle:    bool
+                shuffle csv before epoch (sample=False only)
+    weights:    str
+                sample weights columns (sample=True only)
     n_epochs:   int
                 how many epochs to generate
     verbose:    bool
@@ -70,7 +74,7 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
         for b in range(n_batches):
 
             if sample:
-                batch = csv.sample(batch_size)
+                batch = csv.sample(batch_size, weights=weights)
             else:
                 batch = csv.iloc[b*batch_size:(b+1)*batch_size]
  

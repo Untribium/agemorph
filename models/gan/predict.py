@@ -53,7 +53,7 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
     
     model_config = pickle.load(open(config_path, 'rb'))
 
-    # create out_dir (run_dir/predict/model_name_delta)
+    # create out_dir
     if out_dir is None or out_dir == '':
         out_dir = os.path.join(model_dir, 'predict', split, model_name)
     
@@ -147,8 +147,7 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                 yr_id = yr_ids[i][0]
 
                 # get index of the current row in csv (TODO de-ugly)
-                row = csv[(csv.img_id_0 == xr_id) & (csv.img_id_1 == yr_id)]
-                index = row.index.values[0]
+                index = (csv.img_id_0 == xr_id) & (csv.img_id_1 == yr_id)
 
                 img_name = str(xr_id) + '_' + str(yr_id) + '_{img_type}.nii.gz'
                 img_path = os.path.join(out_dir, img_name)

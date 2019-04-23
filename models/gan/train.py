@@ -31,6 +31,7 @@ def train(csv_path,
           int_steps,
           vel_resize,
           ti_flow,
+          sample_weights,
           lr,
           beta_1,
           beta_2,
@@ -97,6 +98,7 @@ def train(csv_path,
     model_dir += '_cs={}'.format(cri_steps)
     model_dir += '_rf={}'.format(cri_retune_freq)
     model_dir += '_rs={}'.format(cri_retune_steps)
+    model_dir += '_sw={}'.format(sample_weights is not None)
     model_dir += '_glw={}'.format(gen_loss_weights)
     model_dir += '_clw={}'.format(cri_loss_weights)
     model_dir += '_tag={}'.format(tag) if tag != '' else ''
@@ -169,11 +171,11 @@ def train(csv_path,
     # datagens for training and validation
     train_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, split='train')
+                            sample=True, weights=sample_weights, split='train')
 
     valid_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, split='eval')
+                            sample=True, weights=sample_weights, split='eval')
 
     # convert the delta to channel (for critic) and bin_repr (for ss in gen)
     train_data = convert_delta(train_csv_data, max_delta, int_steps)
@@ -266,6 +268,8 @@ if __name__ == "__main__":
                         help="tag to be added to model_dir")
     parser.add_argument("--gpu", type=str, default=0,
                         dest="gpu_id", help="gpu id number")
+    parser.add_argument("--sample_weights", type=str, default=None,
+                        dest="sample_weights", help="sample weight column in csv")
     parser.add_argument("--batch_size", type=int,
                         dest="batch_size", default=4,
                         help="batch_size")
