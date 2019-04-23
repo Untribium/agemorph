@@ -19,7 +19,7 @@ from keras.utils import multi_gpu_model, Progbar
 # project imports
 from src import datagenerators, networks, losses
 from src.callbacks import TensorBoardExt, TensorBoardVal
-from src.utils import normalize, convert_delta
+from src.utils import normalize
 
 
 def train(csv_path,
@@ -178,8 +178,9 @@ def train(csv_path,
                             sample=True, weights=sample_weights, split='eval')
 
     # convert the delta to channel (for critic) and bin_repr (for ss in gen)
-    train_data = convert_delta(train_csv_data, max_delta, int_steps)
-    valid_data = convert_delta(valid_csv_data, max_delta, int_steps)
+    train_data = datagenerators.gan_gen(train_csv_data, max_delta, int_steps)
+    valid_data = datagenerators.gan_gen(valid_csv_data, max_delta, int_steps)
+
 
     # write model_config to run_dir
     config_path = os.path.join(model_dir, 'config.pkl')

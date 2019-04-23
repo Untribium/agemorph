@@ -10,6 +10,36 @@ import os, sys
 import numpy as np
 import pandas as pd
 import nibabel as nib
+from .utils import to_bin
+
+
+def gan_gen(csv_gen, max_delta, int_steps):
+        '''
+        convert delta into bin representation used in generator ss steps.
+        number of bits is fixed to 16, each bit signifies whether that step
+        is applied to the total displacement
+        '''
+        while(True):
+
+            imgs, lbls = next(csv_gen) 
+
+            lbls[0] = lbls[0][:, 0] # squeeze last dim
+ 
+            delta = lbls[0] / (max_delta + 1) # deltas in days
+            
+            delta_shift = delta *  2**(int_steps + 1)
+            delta_shift = delta_shift.astype(int)
+
+            delta_bin = [to_bin(d, 16) for d in delta_shift]
+
+            lbls[1:1] = [np.array(delta_bin)]
+
+            # channel
+            delta_channel = delta.reshape((-1, 1, 1, 1, 1))
+            lbls[0] = np.ones_like(imgs[0], dtype=np.float32) * delta_channel
+
+            yield imgs, lbls
+
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
                     shuffle=True, weights=None, n_epochs=None, verbose=False):
