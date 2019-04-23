@@ -18,7 +18,6 @@ from keras.utils import multi_gpu_model
 
 # project imports
 from src import datagenerators, networks, losses
-from src.utils import convert_delta
 from src.callbacks import TensorBoardExt
 
 sys.path.append('../../ext/neuron')
@@ -103,7 +102,7 @@ def train(csv_path,
 
         model = networks.miccai2018_net(vol_shape, enc_nf, dec_nf)
 
-        save_file_name = os.path.join(model_dir, '{epoch:03d}.h5')
+        save_file_name = os.path.join(model_dir, 'gen_{epoch:03d}.h5')
 
         # save first iteration
         model.save(save_file_name.format(epoch=0))
@@ -144,16 +143,17 @@ def train(csv_path,
     kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
 
     # convert delta and prepare for fit method
-    train_data = convert_delta(train_csv_gen, max_delta, int_steps, kl_dummy)
-    valid_data = convert_delta(valid_csv_gen, max_delta, int_steps, kl_dummy)
-    board_data = convert_delta(board_csv_gen, max_delta, int_steps, kl_dummy)
+    train_data = datagenerators.vae_gen(train_csv_gen, max_delta, int_steps, kl_dummy)
+    valid_data = datagenerators.vae_gen(valid_csv_gen, max_delta, int_steps, kl_dummy)
+    board_data = datagenerators.vae_gen(board_csv_gen, max_delta, int_steps, kl_dummy)
    
     # write model_config
     config_path = os.path.join(model_dir, 'config.pkl')
     pickle.dump(model_config, open(config_path, 'wb'))
  
     # prepare callbacks
-    tboard_callback = TensorBoardExt(log_dir=model_dir, valid_data=board_data)
+    tboard_callback = TensorBoardExt(log_dir=model_dir, valid_data=board_data,
+                                                        int_steps=int_steps)
 
     # fit generator
     with tf.device(gpu):

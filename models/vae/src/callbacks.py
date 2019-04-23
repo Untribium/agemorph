@@ -3,7 +3,8 @@ import numpy as np
 import io
 from keras.callbacks import Callback, TensorBoard
 from PIL import Image
-from .utils import normalize_dim
+from .utils import normalize_dim, to_int
+
 
 def make_image(tensor):
     h, w, c = tensor.shape
@@ -40,9 +41,10 @@ class TensorBoardImage(TensorBoard):
 
 class TensorBoardExt(TensorBoardImage):
 
-    def __init__(self, valid_data, **kwargs):
+    def __init__(self, valid_data, int_steps, **kwargs):
         super(TensorBoardExt, self).__init__(**kwargs)
         self.valid_data = valid_data
+        self.int_steps = int_steps
 
     def on_epoch_end(self, epoch, logs={}):
 
@@ -51,23 +53,24 @@ class TensorBoardExt(TensorBoardImage):
         # generate images on validation data for tensorboard
         [xr, b], [yr, _] = next(self.valid_data)
 
+        print(b)
+
         yf, flow = self.model.predict([xr, b])
-        
-        nbits = b.shape[1]
-        max_delta = 2**nbits - 1
-    
-        d = np.ones_like(xr)[:, :, :, :8, :]
+
+        # delta bin to int to channel        
+        d = np.array([to_int(bits) for bits in b])
+        d = d / 2**(self.int_steps+1)
+        d = d.reshape((-1, 1, 1, 1, 1))
+        d = np.ones_like(xr, dtype=np.float32) * d
 
         # delta indicator
-        for i in range(n_outputs):
-            ratio = np.packbits(b[i:i+1, ::-1], axis=1) >> (8 - nbits)
-            ratio = int(ratio / max_delta * d.shape[1])
-            d[i, :ratio, ...] = 1
-            d[i, ratio:, ...] = -0.2
+        lin = np.linspace(0, 1, xr.shape[1])
+        deltas = np.ones_like(xr) * lin[None, :, None, None, None]
+        deltas = ((deltas < d) * 1.2 - 0.2)[:, :, :, :10, :]
 
         # scans
-        channels = [xr, yr, yf, d]
-        img0 = np.concatenate(channels, axis=3)[:3]
+        channels = [xr, yr, yf, deltas]
+        img0 = np.concatenate(channels, axis=3)[:n_outputs]
         img0 = np.concatenate(img0, axis=0)[:, 40, :, :]
 
         # flow
@@ -83,7 +86,7 @@ class TensorBoardExt(TensorBoardImage):
         channels = [xr, flow_mean, flow_std]
         img1 = np.concatenate(channels, axis=4)
         img1 = np.moveaxis(img1, 4, 0)
-        img1 = np.concatenate(img1, axis=3)[:3]
+        img1 = np.concatenate(img1, axis=3)[:n_outputs]
         img1 = np.concatenate(img1, axis=0)[:, 40, :, None]
 
         img_logs = {

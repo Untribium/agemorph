@@ -10,6 +10,27 @@ import os, sys
 import numpy as np
 import pandas as pd
 import nibabel as nib
+from .utils import to_bin
+
+
+def vae_gen(csv_gen, max_delta, int_steps, kl_dummy):
+    
+    while True:
+        
+        imgs, lbls = next(csv_gen)
+
+        lbls[0] = lbls[0][:, 0]
+
+        delta = lbls[0] / (max_delta + 1)
+
+        delta_shift = delta * 2**(int_steps + 1)
+        delta_shift = delta_shift.astype(int)
+
+        delta_bin = [to_bin(d, 16) for d in delta_shift]
+        delta_bin = np.array(delta_bin)
+
+        yield [imgs[0], delta_bin, *lbls[1:]], [imgs[1], kl_dummy]
+
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
                     shuffle=True, weights=None, n_epochs=None, verbose=False):
