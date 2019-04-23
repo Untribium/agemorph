@@ -11,6 +11,14 @@ import numpy as np
 import pandas as pd
 import nibabel as nib
 
+
+def clf_gen(csv_gen):
+    # convert dx labels (2=MCI, 3=AD in csv, 0=MCI, 1=AD for clf)
+    while True:
+        imgs, lbls = next(csv_gen)
+        yield imgs, [lbls[0] - 2]
+
+
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
                                                 n_epochs=None, verbose=False):
     """

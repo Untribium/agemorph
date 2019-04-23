@@ -24,15 +24,16 @@ def classifier_net(vol_shape, layers, batchnorm=False, leaky=0.0):
 
     vol_shape = tuple(vol_shape)
 
-    ndims = len(vol_size)
+    ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
+
+    print('classifier net:')
+    print('n_layers: {}'.format(len(layers)))
 
     x = Input(shape=vol_shape + (1,))
     print(K.int_shape(x))
     
     inputs = [x]
-
-    print('classifier net:')
 
     for channels, strides in layers:
         x = conv_block(x, channels, strides, batchnorm=batchnorm, leaky=leaky)
@@ -48,7 +49,7 @@ def classifier_net(vol_shape, layers, batchnorm=False, leaky=0.0):
     x = KL.Dense(2, use_bias=False)(x)
     print(K.int_shape(x))
     
-    x = Softmax(x)
+    x = Softmax()(x)
 
     outputs = [x]
  

@@ -30,7 +30,7 @@ def train(csv_path,
           beta_1,
           beta_2,
           epsilon,
-          layers
+          layers,
           batchnorm,
           valid_steps,
           valid_freq):
@@ -41,7 +41,7 @@ def train(csv_path,
     :param model_dir: model folder to save to
     :param gpu_id: integer specifying the gpu to use
     :param lr: learning rate
-    :param nb_epochs: number of training iterations
+    :param epochs: number of training iterations
     :param steps_per_epoch: frequency with which to save models
     :param batch_size: Optional, default of 1. can be larger, depends on GPU memory and volume size
     :param load_model_file: optional h5 model file to initialize with
@@ -49,13 +49,15 @@ def train(csv_path,
     """
 
     model_config = locals()
-    
+
+    assert len(layers) % 2 == 0, "layers must have even length"
+
     assert os.path.isfile(csv_path), 'csv not found at {}'.format(csv_path)
     
     csv_path = os.path.abspath(csv_path)
     model_config['csv_path'] = csv_path
 
-    vol_shape = (80. 96, 80)
+    vol_shape = (80, 96, 80)
     model_config['vol_shape'] = vol_shape
 
     print('input vol_shape is {}'.format(vol_shape))
@@ -76,6 +78,11 @@ def train(csv_path,
     model_dir = model_dir.replace(',', '_')
 
     print('model_dir is {}'.format(model_dir))
+
+    # parse layers
+    layers = list(zip(layers[0::2], layers[1::2]))
+    print(layers)
+
 
     valid_dir = os.path.join(model_dir, 'eval')
 
@@ -104,7 +111,7 @@ def train(csv_path,
         model_opt = Adam(lr=lr, beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
 
         # model
-        model = networks.classifier_net(vol_shape, batchnorm)
+        model = networks.classifier_net(vol_shape, layers, batchnorm)
 
         # save first iteration
         model.save(save_file_name.format(epoch=0))
@@ -117,14 +124,9 @@ def train(csv_path,
         'batch_size should be a multiple of the nr. of gpus. ' + \
         'Got batch_size %d, %d gpus' % (batch_size, nb_gpus)
 
+
     img_keys = ['img_path']
     lbl_keys = ['pat_dx']
-
-    # decrease dx by one, is 2=MCI, 3=AD in data, sparse_cross_entropy expects 0,1
-    def _dx_gen(gen):
-        while True:
-            imgs, lbls = next(gen)
-            yield imgs, [lbls[0]-2]
 
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
@@ -138,9 +140,9 @@ def train(csv_path,
                               lbl_keys=lbl_keys, batch_size=batch_size,
                               sample=True, split='eval')
    
-    train_data = _dx_gen(train_csv_gen)
-    valid_data = _dx_gen(valid_csv_gen)
-    predi_data = _dx_gen(predi_csv_gen)
+    train_data = datagenerators.clf_gen(train_csv_gen)
+    valid_data = datagenerators.clf_gen(valid_csv_gen)
+    predi_data = datagenerators.clf_gen(predi_csv_gen)
 
     tboard_callback = TensorBoard(log_dir=model_dir)
     tboard_callback.set_model(model)
@@ -162,7 +164,7 @@ def train(csv_path,
 
         mg_model.compile(optimizer=model_opt,
                          loss=model_losses,
-                         loss_weights=loss_weights,
+                         loss_weights=[1],
                          metrics=[sparse_categorical_accuracy])
 
         mg_model.fit_generator(train_data,
@@ -181,6 +183,8 @@ if __name__ == "__main__":
                         dest="csv_path", help="data folder")
     parser.add_argument("--gpu", type=str, default=0,
                         dest="gpu_id", help="gpu id number")
+    parser.add_argument("--tag", type=str, default='',
+                        dest="tag", help="tag added to run dir")
     parser.add_argument("--lr", type=float,
                         dest="lr", default=0.0001, help="learning rate")
     parser.add_argument("--beta1", type=float,
@@ -190,16 +194,19 @@ if __name__ == "__main__":
     parser.add_argument("--epsilon", type=float,
                         dest="epsilon", default=0.1, help="epsilon")
     parser.add_argument("--epochs", type=int,
-                        dest="nb_epochs", default=1500,
+                        dest="epochs", default=1500,
                         help="number of iterations")
     parser.add_argument("--steps_per_epoch", type=int,
                         dest="steps_per_epoch", default=100,
                         help="frequency of model saves")
     parser.add_argument("--batch_size", type=int,
-                        dest="batch_size", default=1,
+                        dest="batch_size", default=8,
                         help="batch_size")
+    parser.add_argument("--layers", dest="layers", type=int, nargs="+",
+                        help="pairs of channel, strides for each layer",
+                        default=[4,1,16,2,16,1,64,2,64,1,128,2,128,1,256,2,256,1])
     parser.add_argument("--valid_steps", type=int,
-                        dest="valid_steps", default=25,
+                        dest="valid_steps", default=100,
                         help="valid_steps")
     parser.add_argument("--valid_freq", type=int,
                         dest="valid_freq", default=50,
