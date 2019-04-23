@@ -137,7 +137,7 @@ def miccai2018_net(vol_size, enc_nf, dec_nf, int_steps=5, indexing='ij', vel_res
     unet_model = unet_core(vol_size, enc_nf, dec_nf, vel_resize)
     
     # target delta in binary representation
-    b_in = Input(shape=(int_steps+1,)) 
+    b_in = Input(shape=(16,)) 
 
     x_in = unet_model.inputs[0]
     x_out = unet_model.outputs[-1]

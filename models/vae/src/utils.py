@@ -5,19 +5,29 @@ from keras.callbacks import Callback, TensorBoard
 from PIL import Image
 
 
+def to_bin(value, n_bits=16):
+    bin_string = np.binary_repr(value, n_bits)[::-1]
+    bin_digits = [int(d) for d in bin_string]
+    return bin_digits
+
+
 def convert_delta(gen, max_delta, int_steps, kl_dummy):
     
     while True:
         
         imgs, lbls = next(gen)
 
-        delta_norm = lbls[0] / max_delta
+        lbls[0] = lbls[0][:, 0]
 
-        # binary representation
-        scaled = (delta_norm * 255).astype(np.uint8).reshape((-1, 1))
-        bits = np.unpackbits(scaled, axis=1)[:, int_steps::-1]
+        delta = lbls[0] / (max_delta + 1)
 
-        yield [imgs[0], bits, *lbls[1:]], [imgs[1], kl_dummy]
+        delta_shift = delta * 2**(int_steps + 1)
+        delta_shift = delta_shift.astype(int)
+
+        delta_bin = [to_bin(d, 16) for d in delta_shift]
+        delta_bin = np.array(delta_bin)
+
+        yield [imgs[0], delta_bin, *lbls[1:]], [imgs[1], kl_dummy]
 
 
 def normalize_dim(tensor, axis):

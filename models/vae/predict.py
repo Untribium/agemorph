@@ -22,7 +22,8 @@ sys.path.append('../../ext/neuron')
 import neuron.layers as nrn_layers
 
 
-def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file):
+def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
+                                                    delta, out_imgs):
 
     # GPU handling
     if gpu_id is not None:
@@ -43,19 +44,23 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file):
     # extract run directory and model checkpoint name
     model_dir, model_name = os.path.split(gen_model_file)
     model_name = os.path.splitext(model_name)[0]
+    model_name += '_{:02.0f}'.format(delta) if delta is not None else ''
 
-    # create out_folder
+    # load model config
+    config_path = os.path.join(model_dir, 'config.pkl')
+
+    assert os.path.isfile(config_path), 'model_config not found'
+
+    model_config = pickle.load(open(config_path, 'rb'))
+
+    # create out_dir
     if out_dir is None or out_dir == '':
-        out_dir = os.path.join(model_dir, 'test', model_name)
+        out_dir = os.path.join(model_dir, 'predict', split, model_name)
     
     print('out_dir:', out_dir)
  
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-
-    # load model config
-    config_path = os.path.join(model_dir, 'config.pkl')
-    model_config = pickle.load(open(config_path, 'rb'))
 
     # extract variables
     vol_shape = model_config['vol_shape']
@@ -76,13 +81,21 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file):
 
     csv = pd.read_csv(csv_path)
     csv = csv[csv.split == split]
+
+    if delta is not None:
+        csv['delta_t_real'] = csv['delta_t']
+        csv['delta_t'] = delta * 365
+
+    csv_out_path = os.path.join(out_dir, 'meta.csv')
+    csv.to_csv(csv_out_path, index=False)
  
     img_keys = ['img_path_0', 'img_path_1']
-    lbl_keys = ['delta_t', 'img_id_0']
+    lbl_keys = ['delta_t', 'img_id_0', 'img_id_1']
   
     test_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                                     lbl_keys=lbl_keys, batch_size=batch_size,
-                                    split=split, n_epochs=1, sample=False)
+                                    split=split, n_epochs=1, sample=False,
+                                    shuffle=False)
 
     kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
 
@@ -114,40 +127,50 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file):
             # generate
             yf, flow = gen_net.predict(inputs[:2])
 
-            img_ids = inputs[2]
+            xr_ids = inputs[2]
+            yr_ids = inputs[3]
 
-            for i, img_id in enumerate(img_ids):
+            for i in range(batch_size):
 
-                img_id = img_id[0]
+                xr_id = xr_ids[i][0]
+                yr_id = yr_ids[i][0]
 
-                img_path = os.path.join(out_dir, str(img_id)+'_{img_type}.nii')
+                index = (csv.img_id_0 == xr_id) & (csv.img_id_1 == yr_id)
+
+                img_name = str(xr_id) + '_' + str(yr_id) + '_{img_type}.nii.gz'
+                img_path = os.path.join(out_dir, img_name)
 
                 def _save_nii(data, img_type):
                     nii = nib.Nifti1Image(data, np.eye(4))
                     path = img_path.format(img_type=img_type)
                     nib.save(nii, path)
-                    csv.loc[csv.img_id_0 == img_id, 'img_path_'+img_type] = path
-                
-                _save_nii(yf[i], 'yf')
-                _save_nii(flow[i], 'flow')
+                    csv.loc[index, 'img_path_'+img_type] = path
+               
+                if 'yf' in out_imgs: 
+                    _save_nii(yf[i], 'yf')
+
+                if 'flow' in out_imgs:
+                    _save_nii(flow[i], 'flow')
         
         
-        csv_out = os.path.join(out_dir, 'meta.csv')
-        csv.to_csv(csv_out, index=False)
+        csv.to_csv(csv_out_path, index=False)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
        
-    # optional arguments
+    parser.add_argument("--gpu", type=int, default=None,
+                        dest="gpu_id", help="gpu id number")
     parser.add_argument("--csv", type=str, dest="csv_path")
     parser.add_argument("--split", type=str, dest="split", default="test")
     parser.add_argument("--batch_size", type=int, dest="batch_size", default=8)
+    parser.add_argument("--delta", type=float, dest="delta", default=None)
     parser.add_argument("--out_dir", type=str, dest="out_dir", default=None)
     parser.add_argument("--gen_model", type=str,
                         dest="gen_model_file", help="path to generator h5 model file")
-    parser.add_argument("--gpu", type=int, default=None,
-                        dest="gpu_id", help="gpu id number")
-    
+    parser.add_argument("--output", dest="out_imgs", nargs="+",
+                        default=['yf', 'flow'])
+   
+ 
     args = parser.parse_args()
     predict(**vars(args))
