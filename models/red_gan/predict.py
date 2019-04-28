@@ -15,7 +15,6 @@ import nibabel as nib
 
 # project
 from src import networks, losses, datagenerators
-from src.utils import convert_delta
 
 sys.path.append('../../ext/neuron')
 
@@ -69,11 +68,9 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
     prior_lambda = model_config['prior_lambda']
     cri_loss_weights = model_config['cri_loss_weights']
     gen_loss_weights = model_config['gen_loss_weights']
-    enc_nf = model_config['enc_nf']
-    dec_nf = model_config['dec_nf']
     cri_base_nf = model_config['cri_base_nf']
     int_steps = model_config['int_steps']
-    ti_flow = model_config['ti_flow']
+    reg_model_file = model_config['reg_model_file']
 
     flow_shape = tuple(int(d * vel_resize) for d in vol_shape)
 
@@ -102,7 +99,7 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                                     split=split, n_epochs=1, sample=False,
                                     shuffle=False)
 
-    test_data = convert_delta(test_csv_data, max_delta, int_steps)
+    test_data = datagenerators.gan_gen(test_csv_data, max_delta, int_steps)
 
     kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
 
@@ -118,11 +115,10 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                                          cri_optimizer=Adam(),
                                          gen_loss_weights=gen_loss_weights,
                                          gen_optimizer=Adam(),
-                                         enc_nf=enc_nf, dec_nf=dec_nf,
                                          cri_base_nf=cri_base_nf,
                                          vel_resize=vel_resize,
-                                         ti_flow=ti_flow,
-                                         int_steps=int_steps)
+                                         int_steps=int_steps
+                                         reg_model_file=reg_model_file)
 
         # load weights into model
         gen_net.load_weights(gen_model_file)
@@ -136,7 +132,7 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                 print('step', i)
 
             # generate
-            yf, flow, flow_ti, Df = gen_net.predict([imgs[0], lbls[0], lbls[1]])
+            Df, af, yf, flow, f = gen_net.predict([imgs[0], imgs[1], lbls[1]])
 
             xr_ids = lbls[2]
             yr_ids = lbls[3]
@@ -164,10 +160,8 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                 if 'flow' in out_imgs: 
                     _save_nii(flow[i], 'flow')
 
-                if 'flow_ti' in out_imgs: 
-                    _save_nii(flow_ti[i], 'flow_ti')
-
                 csv.loc[index, 'Df'] = Df[i]
+                csv.loc[index, 'af'] = af[i]
         
         
         csv.to_csv(csv_out_path, index=False)
@@ -186,7 +180,7 @@ if __name__ == "__main__":
     parser.add_argument("--gen_model", type=str, dest="gen_model_file",
                         help="path to generator h5 model file")
     parser.add_argument("--output", dest="out_imgs", nargs="+",
-                        default=['yf', 'flow', 'flow_ti'])
+                        default=['yf', 'flow'])
 
     
     args = parser.parse_args()

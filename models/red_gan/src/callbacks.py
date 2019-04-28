@@ -105,7 +105,7 @@ class TensorBoardVal(TensorBoardImage):
             cri_true = [self.real, self.fake, self.avgd]
             cri_logs_valid[v_step] = self.cri_model.test_on_batch(cri_in, cri_true)
             
-            gen_in = [imgs[0], lbls[1]]
+            gen_in = [imgs[0], imgs[1], lbls[1]]
             gen_true = [self.real, self.zero, imgs[0], self.kl_dummy, self.f_dummy]
             gen_logs_valid[v_step] = self.gen_model.test_on_batch(gen_in, gen_true)
        
@@ -127,11 +127,12 @@ class TensorBoardVal(TensorBoardImage):
         ind = ind * 1.2 - 0.2
         ind = ind[..., None].repeat(imgs[0].shape[2], axis=-1)
         ind = ind[..., None].repeat(10, axis=-1)
-        
+        ind = ind[..., None]
+
         # combine scans and delta
         channels = [imgs[0], imgs[1], yf_gen, ind]
         scans = np.concatenate(channels, axis=3)[:num_outputs]
-        scans = np.concatenate(img, axis=0)
+        scans = np.concatenate(scans, axis=0)
 
         # all flows
         flow_mean = flow_gen[..., :3]
@@ -155,15 +156,16 @@ class TensorBoardVal(TensorBoardImage):
         flow_std = flow_std[..., None].repeat(3, axis=-1)
 
         # combine flows
-        flows = [flow_mean_rgb, flow_mean, flow_std_rgb, flow_std]
+        channels = [flow_mean_rgb, flow_mean, flow_std_rgb, flow_std]
         flows = np.concatenate(channels, axis=0)
         flows = np.concatenate(flows, axis=3)[:num_outputs]
         flows = np.concatenate(flows, axis=0)
 
+        # TODO use vel_resize param for flow
         sli = imgs[0].shape[2] // 2
 
         img_logs = {
-                'flows': flows[:, sli, :, :]
+                'flows': flows[:, sli // 2, :, :],
                 'scans': scans[:, sli, :, :]
         }
 

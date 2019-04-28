@@ -134,7 +134,8 @@ def train(csv_path,
                                         gen_optimizer=gen_optimizer,
                                         cri_base_nf=cri_base_nf,
                                         vel_resize=vel_resize,
-                                        int_steps=int_steps)
+                                        int_steps=int_steps,
+                                        reg_model_file=reg_model_file)
       
         cri_model_save_path = os.path.join(model_dir, 'cri_{:03d}.h5')
         gen_model_save_path = os.path.join(model_dir, 'gen_{:03d}.h5')
@@ -205,7 +206,9 @@ def train(csv_path,
     tboard_valid = TensorBoardVal(log_dir=valid_dir, data=valid_data,
                                   cri_model=cri_model, gen_model=gen_model,
                                   freq=valid_freq, steps=valid_steps,
-                                  batch_size=batch_size, kl_dummy=kl_dummy)
+                                  batch_size=batch_size, kl_dummy=kl_dummy,
+                                  f_dummy=f_dummy)
+
     tboard_valid.set_model(gen_model)
 
 
@@ -241,7 +244,7 @@ def train(csv_path,
 
                 imgs, lbls = next(train_data)
 
-                gen_in = [imgs[0], lbls[1]] # xr, db
+                gen_in = [imgs[0], imgs[1], lbls[1]] # xr, yr, db
                 gen_true = [real, zero, imgs[0], kl_dummy, f_dummy] # ws, age, l1, kl, f (dummy)
 
                 # train generator

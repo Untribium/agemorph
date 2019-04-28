@@ -150,7 +150,7 @@ class GANLosses():
 
 
     def dummy_loss(self, y_true, y_pred):
-        return 0
+        return y_true
 
 
 def binary_dice(y_true, y_pred):

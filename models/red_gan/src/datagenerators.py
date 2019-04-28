@@ -29,7 +29,7 @@ def gan_gen(csv_gen, max_delta, int_steps, max_steps=None):
 
             lbls[0] = lbls[0][:, 0] # squeeze last dim
             
-            lbls[0] = delta / (max_delta + 1) # rescale to [0,1)
+            lbls[0] = lbls[0] / (max_delta + 1) # rescale to [0,1)
             
             delta_shift = lbls[0] *  2**(int_steps + 1)
             delta_shift = delta_shift.astype(int)

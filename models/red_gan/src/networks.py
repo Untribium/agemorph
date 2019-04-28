@@ -18,7 +18,8 @@ import keras.backend as K
 from keras.models import Model
 import keras.layers as KL
 from keras.layers import Layer
-from keras.layers import Conv3D, Activation, Input, UpSampling3D, concatenate, add
+from keras.layers import Conv3D, Activation, Input, UpSampling3D
+from keras.layers import concatenate, add, subtract
 from keras.layers import LeakyReLU, Reshape, Lambda, BatchNormalization
 from keras.initializers import RandomNormal
 import keras.initializers
@@ -54,15 +55,15 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     """
    
     # --- regressor (pre-trained) ---
-    reg_net = keras.load_model(reg_model_file)
+    reg_net = keras.models.load_model(reg_model_file)
     reg_net.trainable = False
 
     # --- critic ---
 
     gen_net.trainable = False # freeze generator in critic
 
-    xr_cri = Input(shape=vol_size + (1,)) # real 1st visit
-    yr_cri = Input(shape=vol_size + (1,)) # real 2nd visit
+    xr_cri = Input(shape=vol_shape + (1,)) # real 1st visit
+    yr_cri = Input(shape=vol_shape + (1,)) # real 2nd visit
     br_cri = Input(shape=(16,))  # real delta (binary)
 
     cri_inputs = [xr_cri, yr_cri, br_cri]
@@ -96,10 +97,11 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     cri_net.trainable = False # freeze critic in generator
     gen_net.trainable = True # unfreeze generator
 
-    xr_gen = Input(shape=vol_size + (1,)) # real 1st visit
+    xr_gen = Input(shape=vol_shape + (1,)) # real 1st visit
+    yr_gen = Input(shape=vol_shape + (1,)) # real 2nd visit
     br_gen = Input(shape=(16,))  # delta (binary)
     
-    gen_inputs = [xr_gen, br_gen]
+    gen_inputs = [xr_gen, yr_gen, br_gen]
 
     # predict y_hat
     yf_gen, flow_gen, f = gen_net([xr_gen, br_gen])
@@ -178,7 +180,8 @@ def unet_core(vol_shape, vel_resize):
     d9 = KL.Dense(3200)(f)
     print(K.int_shape(d9))
 
-    d8 = #TODO reshape          #  5  2  5  64
+    # TODO shouldn't be hardcoded
+    d8 = KL.Reshape((5, 2, 5, 64))(d9)          #  5  2  5  64
     d8 = concatenate([e8, d8])  #  5  2  5 128
     d8 = conv_block(d8, 64, 1)  #  5  2  5  64
     print(K.int_shape(d8))
@@ -260,40 +263,40 @@ def generator_net(vol_shape, vel_resize, int_steps):
 
 def critic_net(vol_shape, base_nf=8):
 
-    ndims = len(vol_size)
+    ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
 
-    x = Input(shape=vol_shape + (1,)) # image 1st visit
-    y = Input(shape=vol_shape + (1,)) # image 2nd visit (real or fake)
+    i0 = Input(shape=vol_shape + (1,)) # image 1st visit
+    i1 = Input(shape=vol_shape + (1,)) # image 2nd visit (real or fake)
 
-    inputs = [x, y]
+    inputs = [i0, i1]
 
     print('critic net:')
 
-    x = concatenate([x, y])
+    x = concatenate(inputs)
     print(K.int_shape(x))
 
-    x = conv_block(x, base_nf, 2)
+    x = conv_block(x, base_nf, 1)
     print(K.int_shape(x))
 
     x = conv_block(x, base_nf*2, 2)
     print(K.int_shape(x))
-    x = conv_block(x, base_nf*2)
+    x = conv_block(x, base_nf*2, 1)
     print(K.int_shape(x))
    
     x = conv_block(x, base_nf*4, 2)
     print(K.int_shape(x))
-    x = conv_block(x, base_nf*4)
+    x = conv_block(x, base_nf*4, 1)
     print(K.int_shape(x))
     
     x = conv_block(x, base_nf*8, 2)
     print(K.int_shape(x))
-    x = conv_block(x, base_nf*8)
+    x = conv_block(x, base_nf*8, 1)
     print(K.int_shape(x))
     
-    x = conv_block(x, base_nf*16)
+    x = conv_block(x, base_nf*16, 1)
     print(K.int_shape(x))
-    x = conv_block(x, base_nf*16)
+    x = conv_block(x, base_nf*16, 1)
     print(K.int_shape(x))
     
     x = conv_block(x, 1, kernel_size=1, activation=False)
