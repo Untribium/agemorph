@@ -13,11 +13,15 @@ import nibabel as nib
 from .utils import to_bin
 
 
-def gan_gen(csv_gen, max_delta, int_steps):
+def gan_gen(csv_gen, max_delta, int_steps, max_steps=None):
         '''
         convert delta into bin representation used in generator ss steps.
         number of bits is fixed to 16, each bit signifies whether that step
         is applied to the total displacement
+
+        max_steps:
+        drop batch if it requires more than max_steps squaring steps in the
+        vector field integration (to make sure we don't run out of memory)
         '''
         while(True):
 
@@ -31,8 +35,19 @@ def gan_gen(csv_gen, max_delta, int_steps):
             delta_shift = delta_shift.astype(int)
 
             delta_bin = [to_bin(d, 16) for d in delta_shift]
+            delta_bin = np.array(delta_bin)
 
-            lbls[1:1] = [np.array(delta_bin)]
+            if max_steps:
+                # total number of squaring steps
+                sum_steps = delta_bin * np.arange(1, 17)[None, :]
+                sum_steps = sum_steps.max(axis=1).sum()
+
+                print(sum_steps)
+                if sum_steps > max_steps:
+                    continue
+                
+
+            lbls[1:1] = [delta_bin]
 
             # channel
             delta_channel = delta.reshape((-1, 1, 1, 1, 1))
