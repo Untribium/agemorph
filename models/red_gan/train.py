@@ -302,7 +302,7 @@ if __name__ == "__main__":
     parser.add_argument("--cri_loss_weights", type=float, nargs="+",
                         dest="cri_loss_weights", default=[1, 1, 10])
     parser.add_argument("--int_steps", type=int,
-                        dest="int_steps", default=5,
+                        dest="int_steps", default=6,
                         help="number of integration steps in scaling and squaring")
     parser.add_argument("--steps_per_epoch", type=int,
                         dest="steps_per_epoch", default=100,
