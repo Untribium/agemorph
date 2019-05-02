@@ -37,6 +37,8 @@ def train(csv_path,
           beta_2,
           epsilon,
           prior_lambda,
+          batchnorm,
+          leaky,
           reg_model_file,
           cri_base_nf,
           gen_loss_weights,
@@ -91,6 +93,8 @@ def train(csv_path,
     model_dir += '_b2={}'.format(beta_2)
     model_dir += '_ep={}'.format(epsilon)
     model_dir += '_pl={}'.format(prior_lambda)
+    model_dir += '_lk={}'.format(leaky)
+    model_dir += '_bn={}'.format(batchnorm)
     model_dir += '_vr={}'.format(vel_resize)
     model_dir += '_is={}'.format(int_steps)
     model_dir += '_cs={}'.format(cri_steps)
@@ -130,12 +134,14 @@ def train(csv_path,
                                         vol_shape, batch_size, loss_class,
                                         cri_loss_weights=cri_loss_weights,
                                         cri_optimizer=cri_optimizer,
+                                        cri_base_nf=cri_base_nf,
                                         gen_loss_weights=gen_loss_weights,
                                         gen_optimizer=gen_optimizer,
-                                        cri_base_nf=cri_base_nf,
                                         vel_resize=vel_resize,
                                         int_steps=int_steps,
-                                        reg_model_file=reg_model_file)
+                                        reg_model_file=reg_model_file,
+                                        batchnorm=batchnorm,
+                                        leaky=leaky)
       
         cri_model_save_path = os.path.join(model_dir, 'cri_{:03d}.h5')
         gen_model_save_path = os.path.join(model_dir, 'gen_{:03d}.h5')
@@ -186,12 +192,10 @@ def train(csv_path,
     print('model_config:')
     print(model_config)
 
-
     # labels for train/predict
-    # dummy tensor for kl loss, must have correct flow shape
-    kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
-    # dummy tensor for feature rep
-    f_dummy = np.zeros((batch_size, 400))
+    # dummy tensor for features, flow and kl loss, must have correct flow shape
+    feat_dummy = np.zeros((batch_size, 400))
+    flow_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)))
    
     # labels for critic ws loss
     real = np.ones((batch_size, 1)) * (-1) # real labels
@@ -206,8 +210,8 @@ def train(csv_path,
     tboard_valid = TensorBoardVal(log_dir=valid_dir, data=valid_data,
                                   cri_model=cri_model, gen_model=gen_model,
                                   freq=valid_freq, steps=valid_steps,
-                                  batch_size=batch_size, kl_dummy=kl_dummy,
-                                  f_dummy=f_dummy)
+                                  batch_size=batch_size, flow_dummy=flow_dummy,
+                                  feat_dummy=feat_dummy)
 
     tboard_valid.set_model(gen_model)
 
@@ -245,7 +249,12 @@ def train(csv_path,
                 imgs, lbls = next(train_data)
 
                 gen_in = [imgs[0], imgs[1], lbls[1]] # xr, yr, db
-                gen_true = [real, zero, imgs[0], kl_dummy, f_dummy] # ws, age, l1, kl, f (dummy)
+                gen_true = [real,       # wasserstein (yf)
+                            zero,       # L1 (a_yr_hat - a_yf_hat)
+                            imgs[0],    # L1 (xr - yr)
+                            flow_dummy, # kl (flow_params)
+                            flow_dummy, # dummy (flow)
+                            feat_dummy] # dummy (features)
 
                 # train generator
                 gen_logs = gen_model.train_on_batch(gen_in, gen_true)
@@ -298,7 +307,7 @@ if __name__ == "__main__":
     parser.add_argument("--cri_base_nf", type=int,
                         dest="cri_base_nf", default=8)
     parser.add_argument("--gen_loss_weights", type=float, nargs="+",
-                        dest="gen_loss_weights", default=[1, 100, 500, 10, 0])
+                        dest="gen_loss_weights", default=[1, 100, 500, 10, 0, 0])
     parser.add_argument("--cri_loss_weights", type=float, nargs="+",
                         dest="cri_loss_weights", default=[1, 1, 10])
     parser.add_argument("--int_steps", type=int,
@@ -322,6 +331,12 @@ if __name__ == "__main__":
     parser.add_argument("--valid_steps", type=int,
                         dest="valid_steps", default=5,
                         help="number of validation steps")
+    parser.add_argument("--leaky", type=float, default=0.2,
+                        dest="leaky")
+
+    parser.add_argument("--batchnorm", dest="batchnorm", action="store_true")
+    
+    parser.set_defaults(batchnorm=False)
     
     args = parser.parse_args()
     train(**vars(args))

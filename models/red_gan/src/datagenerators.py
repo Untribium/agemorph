@@ -49,6 +49,10 @@ def gan_gen(csv_gen, max_delta, int_steps, max_steps=None):
             # insert bits after delta
             lbls[1:1] = [delta_bits]
 
+            # channel
+            delta_channel = lbls[0].reshape((-1, 1, 1, 1, 1))
+            lbls[2:2] = [np.ones_like(imgs[0], dtype=np.float32) * delta_channel]
+
             yield imgs, lbls
 
 
