@@ -58,7 +58,7 @@ VAE
 \end{equation}
 
 
-\section{Applicability and Adaptation}
+\section{Adaptation}
 supervised vs unsupervised, 2 inputs vs 1
 
 \subsection{Generative Adversarial Networks}
@@ -90,14 +90,17 @@ get heat map of changes
 \chapter{Data}
 
 \section{Synthetic Data}
+Due to the difficulty of reliably validating the performance of generative models
+
 spheres, maybe also more complex (multiple spheres, overlapping)
 randomized position, delta
 shows that the model understands deltas
 
 \section{MRI Data}
-
+For the 
 
 \subsection{Data Sources}
+
 ADNI + AIBL
 
 \subsection{Data Processing}
@@ -113,6 +116,7 @@ Firstly, in what is known as brain extraction or alternatively skull stripping, 
 Incidentally, since the output of our preprocessing pipeline is a segmentation mask, one could combine the data from T1 scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea as a part of this thesis.
 
 \subsection{Data Splitting}
+
 different splits for different tasks
 dx classifier
 conversion set
@@ -127,6 +131,8 @@ results without age reg
 results with age reg? somewhat tricky
 
 \section{VAE}
+
+\section{Diagnosis Classifier}
 
 \section{Age Regressor}
 Validating generative outputs is hard
@@ -151,4 +157,3 @@ F1 score, accuracy
 \chapter{Related Work}
 
 \chapter{Discussion}
-nothing works, but the architecture is kewl
