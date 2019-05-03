@@ -1,1 +1,154 @@
-main
+\chapter{Diffeomorphic Generative Model}
+
+This section discusses the general architecture of our model. In a first step, we examine the brain registration model proposed in \cite{voxelmorph} and discuss its applicability to the generative brain aging problem. We then detail our modifications to this model and the motivations
+
+\section{Voxelmorph}
+
+VAE
+
+\begin{equation}
+	\mathcal{L}(\psi; \bold{x}, \bold{y}) = \mathcal{L}_{rec} + \mathcal{L}_{KL} + \text{const} 
+\end{equation}
+
+
+\begin{equation}
+	\mathcal{L}_{rec} = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ] 
+	= \frac{1}{2 \sigma^2 K} \mathlarger{\sum_{k}} \norm{\mathbf{x} - \mathbf{y} \circ \Phi_{z_{k}}}^{2}
+\end{equation}
+
+\begin{equation}
+	\mathcal{L}_{KL} = 
+		\text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] = 
+		\frac{1}{2} \bigg[
+		\underbrace{
+			tr( \lambda \mathbf{D} \Sigma_{z | x; y} - \log \abs{ \Sigma_{z | x; y} } ) \vphantom{\mu_{z | x; y}^{T}}
+		}_{\text{sigma term}} +
+		\underbrace{
+			\mu_{z | x; y}^{T} \Lambda_{z} \mu_{z | x; y}
+		}_{\text{precision term}} \bigg]
+\end{equation}
+
+\begin{equation}
+	\frac{\lambda}{2} \sum \sum_{j \in N(I)} ( \mu[i] - \mu[j])^{2}
+\end{equation}
+
+
+
+\begin{equation}
+	\mathcal{L}_{gen} = \mathcal{L}_{D} + \mathcal{L}_{sim} + \mathcal{L}_{KL} + \mathcal{L}_{reg} + \mathcal{L}_{clf} 
+\end{equation}
+
+\begin{equation}
+	\mathcal{L}_{cri} = \mathcal{L}_{D} + \mathcal{L}_{sim} + \mathcal{L}_{KL} + \mathcal{L}_{reg} + \mathcal{L}_{clf} 
+\end{equation}
+
+
+
+\begin{equation}
+	\mathcal{L}_{GAN}(M, D) = \E _ { x \sim p_d(x | c = 0) } [ D (x) ] 
+	 - \E _ { x \sim p_d(x | c = 1) } [ D (x + M(x)) ].
+\end{equation}
+
+\begin{equation}
+	\mathcal{L}_{reg} (M) = \norm{M(x)}_1.
+\end{equation}
+
+\begin{equation}
+	M^* = \argmin_M \max_{D \in \mathcal{D}} \mathcal{L}_{GAN}(M, D) + \lambda \mathcal{L}_{reg} (M),
+\end{equation}
+
+
+\section{Applicability and Adaptation}
+supervised vs unsupervised, 2 inputs vs 1
+
+\subsection{Generative Adversarial Networks}
+GAN vs VAE (training loss in VAE? see experiments)
+smaller scale of changes
+
+\subsection{Arbitrary Time Step Scaling and Squaring}
+maths, some plots
+introduce problem of arbitrary time step
+introdice solution, proof
+
+\chapter{Applications}
+
+want to predict brain after given time step
+useful for diagnostics (use existing methods)
+useful for understanding (different brains, same time step)
+
+\section{Long Term Prediction}
+not realistic but works to see trends
+
+\section{Conversion Prediction}
+Want to know whether patients with Mild Cognitive Impairment convert to AD patients
+
+\section{Feature Attribution}
+probabilistic model (sampling from distribution)
+predict multiple images instead of just one
+get heat map of changes
+
+\chapter{Data}
+
+\section{Synthetic Data}
+spheres, maybe also more complex (multiple spheres, overlapping)
+randomized position, delta
+shows that the model understands deltas
+
+\section{MRI Data}
+
+
+\subsection{Data Sources}
+ADNI + AIBL
+
+\subsection{Data Processing}
+Our data processing pipeline can be separated into three distinct steps:
+
+\begin{itemize}
+\item Extraction
+\item Registration
+\item Segmentation
+\end{itemize}
+
+Firstly, in what is known as brain extraction or alternatively skull stripping, we extracts the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit (TODO cite), using the bet and flirt commands respectively. Thirdly, we segment each voxel into three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map, resulting in a new image with a number of potentially benefitial properties: Firstly, all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized MRI data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
+Incidentally, since the output of our preprocessing pipeline is a segmentation mask, one could combine the data from T1 scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea as a part of this thesis.
+
+\subsection{Data Splitting}
+different splits for different tasks
+dx classifier
+conversion set
+leave one visit out
+singles
+pairs
+
+\chapter{Experiments}
+
+\section{Synthetic Data}
+results without age reg
+results with age reg? somewhat tricky
+
+\section{VAE}
+
+\section{Age Regressor}
+Validating generative outputs is hard
+we use an age regressor to predict the age of a given scan
+use regressor on generated image
+show regressor accuracy with normal eval set
+explain why this is only partially relevant
+show regressor performance on LOO eval set
+show that delta loss is significantly better than absolute L1 loss
+
+\section{Fixed Delta Prediction}
+predict brain after a given time step
+check resulting ages from age reg
+plots plots plots
+
+\section{Long Term Prediction}
+train on AD only, HC only?
+
+\section{Conversion Prediction}
+F1 score, accuracy
+
+\chapter{Related Work}
+
+\chapter{Discussion}
+nothing works, but the architecture is kewl

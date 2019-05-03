@@ -3,3 +3,4 @@ __pycache__/
 *.bkp
 /models/*/runs/
 /data/
+/thesis/out/
