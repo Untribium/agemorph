@@ -28,7 +28,7 @@ def regressor_net(vol_shape, layers, batchnorm=False, leaky=0.0, maxpool=False):
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
 
     print('regressor net:')
-    print('n_layers: {}'.format(len(layers)))
+    print('n_layers: {}'.format(len(layers)+1))
 
     x = Input(shape=vol_shape + (1,))
     print(K.int_shape(x))
@@ -38,12 +38,17 @@ def regressor_net(vol_shape, layers, batchnorm=False, leaky=0.0, maxpool=False):
     for channels, strides in layers:
         if maxpool:
             x = conv_block(x, channels, batchnorm=batchnorm, leaky=leaky)
+            print(K.int_shape(x))
             if strides > 1:
                 x = maxpool_block(x, strides=strides, pool_size=strides)
         else:
             x = conv_block(x, channels, strides, batchnorm=batchnorm, leaky=leaky)
-        print(K.int_shape(x))
-   
+            print(K.int_shape(x))
+ 
+    # add final (real) conv layer without batchnorm 
+    x = conv_block(x, layers[-1][0], batchnorm=False, leaky=leaky)
+    print(K.int_shape(x))
+ 
     x = conv_block(x, 1, kernel_size=1, activation=False)
     print(K.int_shape(x))
 

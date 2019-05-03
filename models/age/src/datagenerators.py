@@ -14,9 +14,6 @@ import nibabel as nib
 
 def reg_gen(csv_gen):
     return csv_gen
-    #while True:
-    #    imgs, lbls = next(csv_gen)
-    #    yield [imgs[0]], [lbls[0]]
 
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 

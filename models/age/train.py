@@ -141,7 +141,7 @@ def train(csv_path,
     # also train on conversion set, doesn't impact gen performance
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split=['train', 'test'])
+                              sample=True, split='train')
     
     valid_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     parser.add_argument("--layers", dest="layers", type=int, nargs="+",
                         help="pairs of channel, strides for each layer",
                         default=[4,1,16,2,16,1,64,2,64,1,128,2,128,1,256,2,256,1])
-    parser.add_argument("--valid_steps", type=int, default=100,
+    parser.add_argument("--valid_steps", type=int, default=25,
                         dest="valid_steps", help="valid_steps")
     parser.add_argument("--leaky", type=float, default=0.0,
                         dest="leaky", help="leakiness of ReLU, float >= 0")
