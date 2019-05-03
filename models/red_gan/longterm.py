@@ -22,7 +22,7 @@ sys.path.append('../../ext/neuron')
 import neuron.layers as nrn_layers
 
 
-def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, step):
+def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, step, out_imgs):
 
     # GPU handling
     if gpu_id is not None:
@@ -77,12 +77,12 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
     vel_resize = model_config['vel_resize']
     prior_lambda = model_config['prior_lambda']
     cri_loss_weights = model_config['cri_loss_weights']
-    gen_loss_weights = model_config['gen_loss_weights']
-    enc_nf = model_config['enc_nf']
-    dec_nf = model_config['dec_nf']
     cri_base_nf = model_config['cri_base_nf']
+    gen_loss_weights = model_config['gen_loss_weights']
     int_steps = model_config['int_steps']
-    ti_flow = model_config['ti_flow']
+    reg_model_file = model_config['reg_model_file']
+    batchnorm = model_config['batchnorm']
+    leaky = model_config['leaky']
 
     flow_shape = tuple(int(d * vel_resize) for d in vol_shape)
 
@@ -96,7 +96,7 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
     csv.to_csv(csv_out_path, index=False)
 
     img_keys = ['img_path']
-    lbl_keys = ['delta_t', 'img_id', 'delta_t']
+    lbl_keys = ['delta_t', 'img_id']
  
     # datagenerator (from meta in out_dir!) 
     test_csv_data = datagenerators.csv_gen(csv_out_path, img_keys=img_keys,
@@ -104,9 +104,7 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                                     split=None, n_epochs=1, sample=False,
                                     shuffle=False)
 
-    test_data = convert_delta(test_csv_data, max_delta, int_steps)
-
-    kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
+    test_data = datagenerators.gan_gen(test_csv_data, max_delta, int_steps)
 
     with tf.device(gpu):
 
@@ -118,13 +116,14 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
         _, gen_net = networks.gan_models(vol_shape, batch_size, loss_class,
                                          cri_loss_weights=cri_loss_weights,
                                          cri_optimizer=Adam(),
+                                         cri_base_nf=cri_base_nf,
                                          gen_loss_weights=gen_loss_weights,
                                          gen_optimizer=Adam(),
-                                         enc_nf=enc_nf, dec_nf=dec_nf,
-                                         cri_base_nf=cri_base_nf,
                                          vel_resize=vel_resize,
-                                         ti_flow=ti_flow,
-                                         int_steps=int_steps)
+                                         int_steps=int_steps,
+                                         reg_model_file=reg_model_file,
+                                         batchnorm=batchnorm,
+                                         leaky=leaky)
 
         # load weights into model
         gen_net.load_weights(gen_model_file)
@@ -138,18 +137,18 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                 print('step', i)
 
             # generate
-            yf, flow, flow_ti, Df = gen_net.predict([imgs[0], lbls[0], lbls[1]])
+            Df, delta_f, yf, flow_params, flow, features = gen_net.predict([imgs[0], imgs[0], lbls[1]])
 
-            img_ids = lbls[2]
-            deltas = lbls[3] / 365
+            img_ids = lbls[3]
+            deltas = lbls[0] * max_delta / 365
 
             for i in range(batch_size):
 
                 img_id = img_ids[i][0]
-                delta = deltas[i][0]
+                delta = deltas[i]
 
                 img_name = str(img_id) + '_{img_type}_'
-                img_name += '{:04.1f}.nii.gz'.format(delta)
+                img_name += '{:04.1f}.nii.gz'.format(round(delta, 1))
 
                 img_path = os.path.join(out_dir, img_name)
 
@@ -158,12 +157,15 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                     path = img_path.format(img_type=img_type)
                     nib.save(nii, path)
                     csv.loc[csv.img_id == img_id, 'img_path_'+img_type] = path
+               
+                if 'yf' in out_imgs: 
+                    _save_nii(yf[i], 'yf')
                 
-                _save_nii(yf[i], 'yf')
-                _save_nii(flow[i], 'flow')
-                _save_nii(flow_ti[i], 'flow_ti')
+                if 'flow' in out_imgs: 
+                    _save_nii(flow[i], 'flow')
 
                 csv.loc[csv.img_id == img_id, 'Df'] = Df[i]
+                csv.loc[csv.img_id == img_id, 'delta_f'] = delta_f[i]
         
         
         csv.to_csv(csv_out_path, index=False)
@@ -172,6 +174,8 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
 if __name__ == "__main__":
     parser = ArgumentParser()
        
+    parser.add_argument("--gpu", type=int, default=None,
+                        dest="gpu_id", help="gpu id number")
     parser.add_argument("--img_path", type=str, dest="img_path", default=None)
     parser.add_argument("--batch_size", type=int, dest="batch_size", default=1)
     parser.add_argument("--start", type=float, dest="start", default=None)
@@ -180,8 +184,8 @@ if __name__ == "__main__":
     parser.add_argument("--out_dir", type=str, dest="out_dir", default=None)
     parser.add_argument("--gen_model", type=str,
                         dest="gen_model_file", help="path to generator h5 model file")
-    parser.add_argument("--gpu", type=int, default=None,
-                        dest="gpu_id", help="gpu id number")
+    parser.add_argument("--output", dest="out_imgs", nargs="+",
+                        default=['yf', 'flow'])
     
     args = parser.parse_args()
     predict(**vars(args))

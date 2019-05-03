@@ -1,6 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 *.bkp
+*.swp
 /models/*/runs/
 /data/
 /thesis/out/

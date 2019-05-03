@@ -68,15 +68,19 @@ class TensorBoardImage(TensorBoard):
 
 class TensorBoardVal(TensorBoardImage):
 
-    def __init__(self, cri_model, gen_model, data, freq, steps, batch_size, kl_dummy, f_dummy, **kwargs):
+    def __init__(self, cri_model, gen_model, data, freq, steps, batch_size,
+                    flow_dummy, feat_dummy, n_outputs=3, **kwargs):
+
         self.data = data
         self.freq = freq
         self.steps = steps
         self.gen_model = gen_model
         self.cri_model = cri_model
 
-        self.kl_dummy = kl_dummy
-        self.f_dummy = f_dummy
+        self.flow_dummy = flow_dummy
+        self.feat_dummy = feat_dummy
+
+        self.n_outputs = n_outputs
 
         # critic labels 
         self.real = np.ones((batch_size, 1)) * (-1) # real labels
@@ -106,7 +110,7 @@ class TensorBoardVal(TensorBoardImage):
             cri_logs_valid[v_step] = self.cri_model.test_on_batch(cri_in, cri_true)
             
             gen_in = [imgs[0], imgs[1], lbls[1]]
-            gen_true = [self.real, self.zero, imgs[0], self.kl_dummy, self.f_dummy]
+            gen_true = [self.real, self.zero, imgs[0], self.flow_dummy, self.flow_dummy, self.feat_dummy]
             gen_logs_valid[v_step] = self.gen_model.test_on_batch(gen_in, gen_true)
        
         # take mean 
@@ -119,7 +123,103 @@ class TensorBoardVal(TensorBoardImage):
         num_outputs = 3
 
         # predict y_hat and flow params
-        _, _, yf_gen, flow_gen, _ = self.gen_model.predict(gen_in)
+        _, _, yf_gen, flow_params_gen, flow_gen, _ = self.gen_model.predict(gen_in)
+
+        outputs = zip(imgs[0], imgs[1], lbls[0], yf_gen, flow_params_gen, flow_gen)
+        outputs = list(outputs)
+
+        logs['gen_flow_mean'] = 0
+        logs['gen_flow_std'] = 0
+
+        def img_strip(xr, yr, delta, yf, flow_params, flow):
+
+            # delta indicator
+            lin = np.linspace(0, 1, xr.shape[0])
+            ind = (lin < delta) * 1.2 - 0.2
+            ind = ind[..., None].repeat(xr.shape[1], axis=-1)
+            ind = ind[..., None, None].repeat(10, axis=-2)
+
+            # scans
+            scans = [xr, yr, yf, ind]
+            scans = np.concatenate(scans, axis=2)
+
+            def _normalize(tensor):
+                max_v = np.abs(tensor).max()
+                max_v = 1 if max_v == 0 else max_v
+                tensor /= max_v
+                return tensor
+            
+            # --- flows ---
+            flow_mag = np.sqrt((flow * flow).sum(axis=-1))
+            flow_mag = _normalize(flow_mag)
+            flow_mag = flow_mag[..., None].repeat(3, axis=-1)
+            
+            flow = _normalize(flow)
+
+            flow_dim = [flow[..., d:d+1].repeat(3, axis=-1) for d in range(3)]
+
+            flows = [xr.repeat(3, axis=-1), flow_mag, flow, *flow_dim]
+            flows = np.concatenate(flows, axis=2)
+
+            # --- flows mean ---
+            mean_rgb = flow_params[..., :3]
+
+            # magnitude
+            mean_mag = np.sqrt((mean_rgb * mean_rgb).sum(axis=-1))
+            logs['gen_flow_mean'] += np.abs(mean_mag).mean()
+            mean_mag = _normalize(mean_mag)
+            mean_mag = mean_mag[..., None].repeat(3, axis=-1)
+
+            mean_rgb = _normalize(mean_rgb)
+
+            # repeat channel to match rgb shape
+            mean_dim = [mean_rgb[..., d:d+1].repeat(3, axis=-1) for d in range(3)]
+
+            flows_mean = [mean_mag, mean_rgb, *mean_dim]
+            flows_mean = np.concatenate(flows_mean, axis=2)
+
+            # --- flows_std ---
+            std_rgb = flow_params[..., 3:]
+            std_rgb = np.exp(std_rgb)
+
+            # magnitude
+            std_mag = np.sqrt((std_rgb * std_rgb).sum(axis=-1))
+            logs['gen_flow_std'] += np.abs(std_mag).mean()
+            std_mag = _normalize(std_mag)
+            std_mag = std_mag[..., None].repeat(3, axis=-1)
+
+            std_rgb = _normalize(std_rgb)
+
+            # repeat channel to match rgb shape
+            std_dim = [std_rgb[..., d:d+1].repeat(3, axis=-1) for d in range(3)]
+
+            flows_std = [std_mag, std_rgb, *std_dim]
+            flows_std = np.concatenate(flows_std, axis=2)
+
+            return scans, flows, flows_mean, flows_std
+         
+          
+        img_strips = [img_strip(*o) for o in outputs[:self.n_outputs]]
+        img_strips = list(zip(*img_strips))
+
+        logs['gen_flow_mean'] /= self.n_outputs 
+        logs['gen_flow_std'] /= self.n_outputs 
+
+        scans = np.concatenate(img_strips[0], axis=0)
+        flows = np.concatenate(img_strips[1], axis=0)
+        flows_mean = np.concatenate(img_strips[2], axis=0)
+        flows_std = np.concatenate(img_strips[3], axis=0)
+
+        sli = imgs[0].shape[2] // 2
+
+        img_logs = {
+            'scans': scans[:, sli, :, :],
+            'flows': flows[:, sli, :, :],
+            'flows_mean': flows_mean[:, sli // 2, :, :],
+            'flows_std': flows_std[:, sli // 2, :, :]
+        }
+            
+        ''' 
 
         # delta indicator
         lin = np.linspace(0, 1, imgs[0].shape[1])
@@ -169,4 +269,5 @@ class TensorBoardVal(TensorBoardImage):
                 'scans': scans[:, sli, :, :]
         }
 
+        '''
         super(TensorBoardVal, self).on_epoch_end(epoch, logs, img_logs) 

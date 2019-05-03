@@ -20,7 +20,7 @@ import keras.layers as KL
 from keras.layers import Layer
 from keras.layers import Conv3D, Activation, Input, UpSampling3D
 from keras.layers import concatenate, add, subtract
-from keras.layers import LeakyReLU, Reshape, Lambda, BatchNormalization
+from keras.layers import ReLU, Reshape, Lambda, BatchNormalization
 from keras.initializers import RandomNormal
 import keras.initializers
 from functools import partial
@@ -37,12 +37,12 @@ import neuron.utils as nrn_utils
 
 def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimizer, 
                cri_base_nf, gen_loss_weights, gen_optimizer, vel_resize, int_steps,
-               reg_model_file):
+               reg_model_file, batchnorm, leaky):
 
     vol_shape = tuple(vol_shape)
     
-    gen_net = generator_net(vol_shape, vel_resize, int_steps)
-    cri_net = critic_net(vol_shape, cri_base_nf)
+    gen_net = generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky)
+    cri_net = critic_net(vol_shape, cri_base_nf, leaky)
 
     """
     nomenclature
@@ -67,9 +67,9 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     br_cri = Input(shape=(16,))  # real delta (binary)
 
     cri_inputs = [xr_cri, yr_cri, br_cri]
-
+    
     # generate image
-    yf_cri, _, _ = gen_net([xr_cri, br_cri])
+    yf_cri, _, _, _ = gen_net([xr_cri, br_cri])
 
     # interpolated sample
     ya_cri = RandomWeightedAverage(batch_size=batch_size)([yr_cri, yf_cri])
@@ -104,7 +104,7 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     gen_inputs = [xr_gen, yr_gen, br_gen]
 
     # predict y_hat
-    yf_gen, flow_gen, f = gen_net([xr_gen, br_gen])
+    yf_gen, flow_params_gen, flow_gen, features = gen_net([xr_gen, br_gen])
    
     # get wasserstein loss
     Df_gen = cri_net([xr_gen, yf_gen])
@@ -114,7 +114,7 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     a_yf_gen = reg_net([yf_gen])
     a_df_gen = subtract([a_yf_gen, a_yr_gen])
 
-    gen_outputs = [Df_gen, a_df_gen, yf_gen, flow_gen, f]
+    gen_outputs = [Df_gen, a_df_gen, yf_gen, flow_params_gen, flow_gen, features]
     
     gen_model = Model(inputs=gen_inputs, outputs=gen_outputs)
 
@@ -122,6 +122,7 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
                 loss_class.l1_loss,
                 loss_class.l1_loss,
                 loss_class.kl_loss,
+                loss_class.dummy_loss,
                 loss_class.dummy_loss]
 
     gen_model.compile(loss=gen_loss, optimizer=gen_optimizer, loss_weights=gen_loss_weights)
@@ -129,7 +130,7 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     return cri_model, gen_model
 
 
-def unet_core(vol_shape, vel_resize):
+def unet_core(vol_shape, vel_resize, batchnorm, leaky):
     """
     unet architecture for voxelmorph models presented in the CVPR 2018 paper. 
     You may need to modify this code (e.g., number of layers) to suit your project needs.
@@ -143,7 +144,12 @@ def unet_core(vol_shape, vel_resize):
 
     ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
-    
+   
+    shapes = []
+    for i in range(5):
+        shape = np.array(vol_shape) // 2**i
+        shapes.append(tuple(shape))
+ 
     upsample_layer = getattr(KL, 'UpSampling{}D'.format(ndims))
 
     print('generator unet:')
@@ -154,82 +160,84 @@ def unet_core(vol_shape, vel_resize):
 
     inputs = [e0]
 
-    e1 = conv_block(e0, 8, 1)   # 80 32 80   8
+    e1 = conv_block(e0,  8, 1, batchnorm=batchnorm, leaky=leaky) # 80 32 80   8
     print(K.int_shape(e1))
-    e2 = conv_block(e1, 16, 2)  # 40 16 40  16
+    e2 = conv_block(e1, 16, 2, batchnorm=batchnorm, leaky=leaky) # 40 16 40  16
     print(K.int_shape(e2))
-    e3 = conv_block(e2, 16, 1)  # 40 16 40  16
+    e3 = conv_block(e2, 16, 1, batchnorm=batchnorm, leaky=leaky) # 40 16 40  16
     print(K.int_shape(e3))
-    e4 = conv_block(e3, 32, 2)  # 20  8 20  32
+    e4 = conv_block(e3, 32, 2, batchnorm=batchnorm, leaky=leaky) # 20  8 20  32
     print(K.int_shape(e4))
-    e5 = conv_block(e4, 32, 1)  # 20  8 20  32
+    e5 = conv_block(e4, 32, 1, batchnorm=batchnorm, leaky=leaky) # 20  8 20  32
     print(K.int_shape(e5))
-    e6 = conv_block(e5, 64, 2)  # 10  4 10  64
+    e6 = conv_block(e5, 64, 2, batchnorm=batchnorm, leaky=leaky) # 10  4 10  64
     print(K.int_shape(e6))
-    e7 = conv_block(e6, 64, 1)  # 10  4 10  64
+    e7 = conv_block(e6, 64, 1, batchnorm=batchnorm, leaky=leaky) # 10  4 10  64
     print(K.int_shape(e7))
-    e8 = conv_block(e7, 64, 2)  #  5  2  5  64
+    e8 = conv_block(e7, 64, 2, batchnorm=batchnorm, leaky=leaky) #  5  2  5  64
     print(K.int_shape(e8))
 
     e9 = KL.Flatten()(e8)
     print(K.int_shape(e9))
 
-    f = KL.Dense(400)(e9)
-    print(K.int_shape(f))
+    features = KL.Dense(400)(e9)
+    print(K.int_shape(features))
 
-    d9 = KL.Dense(3200)(f)
+    d9 = KL.Dense(3200)(features)
     print(K.int_shape(d9))
 
-    # TODO shouldn't be hardcoded
-    d8 = KL.Reshape((5, 2, 5, 64))(d9)          #  5  2  5  64
-    d8 = concatenate([e8, d8])  #  5  2  5 128
-    d8 = conv_block(d8, 64, 1)  #  5  2  5  64
+    d8 = KL.Reshape((*shapes[-1], 64))(d9)                       #  5  2  5  64
+    d8 = concatenate([e8, d8])                                   #  5  2  5 128
+    d8 = conv_block(d8, 64, 1, batchnorm=batchnorm, leaky=leaky) #  5  2  5  64
     print(K.int_shape(d8))
 
-    d7 = upsample_layer()(d8)   # 10  4 10  64
+    d7 = upsample_layer()(d8)                                    # 10  4 10  64
+    d7 = conv_block(d7, 64, 1, batchnorm=batchnorm, leaky=leaky) # 10  4 10  64
     print(K.int_shape(d7))
-    d7 = concatenate([e7, d7])  # 10  4 10 128
-    d6 = conv_block(d7, 32, 1)  # 10  4 10  32
+    d7 = concatenate([e7, d7])                                   # 10  4 10 128
+    d6 = conv_block(d7, 64, 1, batchnorm=batchnorm, leaky=leaky) # 10  4 10  64
     print(K.int_shape(d6))
- 
-    d5 = upsample_layer()(d6)   # 20  8 20  32
+
+    d5 = upsample_layer()(d6)                                    # 20  8 20  64
+    d5 = conv_block(d5, 32, 1, batchnorm=batchnorm, leaky=leaky) # 20  8 20  32
     print(K.int_shape(d5))
-    d5 = concatenate([e5, d5])  # 20  8 20  64
-    d4 = conv_block(d5, 16, 1)  # 20  8 20  16
+    d5 = concatenate([e5, d5])                                   # 20  8 20  64
+    d4 = conv_block(d5, 32, 1, batchnorm=batchnorm, leaky=leaky) # 20  8 20  32
     print(K.int_shape(d4))
 
-    d3 = upsample_layer()(d4)   # 40 16 40  16
+    d3 = upsample_layer()(d4)                                    # 40 16 40  32
+    d3 = conv_block(d3, 16, 1, batchnorm=batchnorm, leaky=leaky) # 40 16 40  16
     print(K.int_shape(d3))
-    d3 = concatenate([e3, d3])  # 40 16 40  32
-    d2 = conv_block(d3, 8, 1)   # 40 16 40   8
+    d3 = concatenate([e3, d3])                                   # 40 16 40  32
+    d2 = conv_block(d3,  8, 1, batchnorm=False,     leaky=leaky) # 40 16 40   8
     print(K.int_shape(d2))
 
     if vel_resize == 1.0:
-        d1 = upsample_layer()(d2)
+        d1 = upsample_layer()(d2)                                # 80 32 80   8
         print(K.int_shape(d1))
-        d1 = concatenate([e1, d1])
-        d0 = conv_block(d1, 3, 1)
+        d1 = concatenate([e1, d1])                               # 80 32 80  16
+        d0 = conv_block(d1, 3, 1, batchnorm=False,  leaky=leaky) # 80 32 80   3
         print(K.int_shape(d0))
         
-        outputs = [d0, f]
+        outputs = [d0, features]
     else:
-        outputs = [d2, f]
-    
+        outputs = [d2, features]
+   
     return Model(inputs=inputs, outputs=outputs)
 
 
-def generator_net(vol_shape, vel_resize, int_steps):
+def generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky):
  
     ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
     
-    unet = unet_core(vol_shape, vel_resize)
+    unet = unet_core(vol_shape, vel_resize, batchnorm, leaky)
     
     # target delta in binary representation
     b_in = Input(shape=(16,)) 
     
     x_in = unet.inputs[0]
-    x_out, f = unet.outputs
+    x_out, features = unet.outputs
 
     inputs = [x_in, b_in] 
     
@@ -256,66 +264,66 @@ def generator_net(vol_shape, vel_resize, int_steps):
 
     y = SpatialTransformer(interp_method='linear', indexing='ij')([x_in, flow])
   
-    outputs = [y, flow_params, f]
+    outputs = [y, flow_params, flow, features]
 
     return Model(inputs=inputs, outputs=outputs)
 
 
-def critic_net(vol_shape, base_nf=8):
+def critic_net(vol_shape, base_nf=8, leaky=0.2):
 
     ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
 
-    i0 = Input(shape=vol_shape + (1,)) # image 1st visit
-    i1 = Input(shape=vol_shape + (1,)) # image 2nd visit (real or fake)
+    x = Input(shape=vol_shape + (1,)) # image 1st visit
+    y = Input(shape=vol_shape + (1,)) # image 2nd visit (real or fake)
 
-    inputs = [i0, i1]
+    inputs = [x, y]
 
     print('critic net:')
 
-    x = concatenate(inputs)
-    print(K.int_shape(x))
+    l = concatenate(inputs)
+    print(K.int_shape(l))
 
-    x = conv_block(x, base_nf, 1)
-    print(K.int_shape(x))
+    l = conv_block(l, base_nf,    1, leaky=leaky)
+    print(K.int_shape(l))
 
-    x = conv_block(x, base_nf*2, 2)
-    print(K.int_shape(x))
-    x = conv_block(x, base_nf*2, 1)
-    print(K.int_shape(x))
+    l = conv_block(l, base_nf*2,  2, leaky=leaky)
+    print(K.int_shape(l))
+    l = conv_block(l, base_nf*2,  1, leaky=leaky)
+    print(K.int_shape(l))
    
-    x = conv_block(x, base_nf*4, 2)
-    print(K.int_shape(x))
-    x = conv_block(x, base_nf*4, 1)
-    print(K.int_shape(x))
+    l = conv_block(l, base_nf*4,  2, leaky=leaky)
+    print(K.int_shape(l))
+    l = conv_block(l, base_nf*4,  1, leaky=leaky)
+    print(K.int_shape(l))
     
-    x = conv_block(x, base_nf*8, 2)
-    print(K.int_shape(x))
-    x = conv_block(x, base_nf*8, 1)
-    print(K.int_shape(x))
+    l = conv_block(l, base_nf*8,  2, leaky=leaky)
+    print(K.int_shape(l))
+    l = conv_block(l, base_nf*8,  1, leaky=leaky)
+    print(K.int_shape(l))
     
-    x = conv_block(x, base_nf*16, 1)
-    print(K.int_shape(x))
-    x = conv_block(x, base_nf*16, 1)
-    print(K.int_shape(x))
+    l = conv_block(l, base_nf*16, 1, leaky=leaky) # stride 1!
+    print(K.int_shape(l))
+    l = conv_block(l, base_nf*16, 1, leaky=leaky)
+    print(K.int_shape(l))
     
-    x = conv_block(x, 1, kernel_size=1, activation=False)
-    print(K.int_shape(x))
+    l = conv_block(l, 1, kernel_size=1, activation=False)
+    print(K.int_shape(l))
 
-    x = KL.Flatten()(x)
-    print(K.int_shape(x))
+    l = KL.Flatten()(l)
+    print(K.int_shape(l))
 
     # weighted sum
-    x = KL.Dense(1, use_bias=False)(x)
-    print(K.int_shape(x))
+    l = KL.Dense(1, use_bias=False)(l)
+    print(K.int_shape(l))
     
-    outputs = [x]
+    outputs = [l]
  
     return Model(inputs=inputs, outputs=outputs)
 
 
 # Helper functions
-def conv_block(x_in, nf, strides=1, kernel_size=3, activation=True, batchnorm=False):
+def conv_block(x_in, nf, strides=1, kernel_size=3, activation=True, batchnorm=False, leaky=0.2):
     """
     specific convolution module including convolution followed by leakyrelu
     """
@@ -328,8 +336,7 @@ def conv_block(x_in, nf, strides=1, kernel_size=3, activation=True, batchnorm=Fa
                  kernel_initializer='he_normal', strides=strides)(x_in)
     
     if activation:
-        x_out = LeakyReLU(0.2)(x_out)
-
+        x_out = ReLU(negative_slope=leaky)(x_out)
     if batchnorm:
         x_out = BatchNormalization()(x_out)
     

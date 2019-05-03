@@ -71,6 +71,8 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
     cri_base_nf = model_config['cri_base_nf']
     int_steps = model_config['int_steps']
     reg_model_file = model_config['reg_model_file']
+    batchnorm = model_config['batchnorm']
+    leaky = model_config['leaky']
 
     flow_shape = tuple(int(d * vel_resize) for d in vol_shape)
 
@@ -78,17 +80,21 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
     if csv_path is None or csv_path == '':
         csv_path = model_config['csv_path']
 
-    csv = pd.read_csv(csv_path)
-    csv = csv[csv.split == split]
-
-    # backup then overwrite delta if provided, else use delta from csv
-    if delta is not None:
-        csv['delta_t_real'] = csv['delta_t']
-        csv['delta_t'] = delta * 365
-
-    # write meta to out_dir
     csv_out_path = os.path.join(out_dir, 'meta.csv')
-    csv.to_csv(csv_out_path, index=False)
+   
+    if not os.path.isfile(csv_out_path): 
+        csv = pd.read_csv(csv_path)
+        csv = csv[csv.split == split]
+
+        # backup then overwrite delta if provided, else use delta from csv
+        if delta is not None:
+            csv['delta_t_real'] = csv['delta_t']
+            csv['delta_t'] = delta * 365
+
+        # write meta to out_dir
+        csv.to_csv(csv_out_path, index=False)
+
+    csv = pd.read_csv(csv_out_path)
 
     img_keys = ['img_path_0', 'img_path_1']
     lbl_keys = ['delta_t', 'img_id_0', 'img_id_1']
@@ -101,8 +107,6 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
 
     test_data = datagenerators.gan_gen(test_csv_data, max_delta, int_steps)
 
-    kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
-
     with tf.device(gpu):
 
         print('loading model')
@@ -113,12 +117,14 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
         _, gen_net = networks.gan_models(vol_shape, batch_size, loss_class,
                                          cri_loss_weights=cri_loss_weights,
                                          cri_optimizer=Adam(),
+                                         cri_base_nf=cri_base_nf,
                                          gen_loss_weights=gen_loss_weights,
                                          gen_optimizer=Adam(),
-                                         cri_base_nf=cri_base_nf,
                                          vel_resize=vel_resize,
-                                         int_steps=int_steps
-                                         reg_model_file=reg_model_file)
+                                         int_steps=int_steps,
+                                         reg_model_file=reg_model_file,
+                                         batchnorm=batchnorm,
+                                         leaky=leaky)
 
         # load weights into model
         gen_net.load_weights(gen_model_file)
@@ -131,18 +137,20 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
             if i % 10 == 0:
                 print('step', i)
 
-            # generate
-            Df, af, yf, flow, f = gen_net.predict([imgs[0], imgs[1], lbls[1]])
+            # generate ws loss, perceived delta loss, y_hat, flow_params, feature map
+            pred_out = gen_net.predict([imgs[0], imgs[1], lbls[1]])
 
-            xr_ids = lbls[2]
-            yr_ids = lbls[3]
+            Df, delta_f, yf, flow_params, flow, features = pred_out
+
+            xr_ids = lbls[3]
+            yr_ids = lbls[4]
 
             for i in range(batch_size):
 
                 xr_id = xr_ids[i][0]
                 yr_id = yr_ids[i][0]
 
-                # get index of the current row in csv (TODO de-ugly)
+                # index of the row in csv
                 index = (csv.img_id_0 == xr_id) & (csv.img_id_1 == yr_id)
 
                 img_name = str(xr_id) + '_' + str(yr_id) + '_{img_type}.nii.gz'
@@ -157,11 +165,14 @@ def predict(gpu_id, csv_path, split, batch_size, out_dir, gen_model_file,
                 if 'yf' in out_imgs: 
                     _save_nii(yf[i], 'yf')
 
+                if 'flow_params' in out_imgs: 
+                    _save_nii(flow_params[i], 'flow_params')
+
                 if 'flow' in out_imgs: 
                     _save_nii(flow[i], 'flow')
 
                 csv.loc[index, 'Df'] = Df[i]
-                csv.loc[index, 'af'] = af[i]
+                csv.loc[index, 'delta_f'] = delta_f[i]
         
         
         csv.to_csv(csv_out_path, index=False)
@@ -180,7 +191,7 @@ if __name__ == "__main__":
     parser.add_argument("--gen_model", type=str, dest="gen_model_file",
                         help="path to generator h5 model file")
     parser.add_argument("--output", dest="out_imgs", nargs="+",
-                        default=['yf', 'flow'])
+                        default=['yf', 'flow_params', 'flow'])
 
     
     args = parser.parse_args()
