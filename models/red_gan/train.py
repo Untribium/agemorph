@@ -40,6 +40,7 @@ def train(csv_path,
           batchnorm,
           leaky,
           reg_model_file,
+          clf_model_file,
           cri_base_nf,
           gen_loss_weights,
           cri_loss_weights,
@@ -61,11 +62,10 @@ def train(csv_path,
     :param prior_lambda: the prior_lambda, the scalar in front of the smoothing laplacian, in MICCAI paper
     """
 
-    vol_shape = tuple(vol_shape)
-
+    # grab config (all local variables at this point)
     model_config = locals()
 
-    # gpu handling
+    # claim gpu, do early so we fail early if it's occupied
     gpu = '/gpu:%d' % 0 # gpu_id
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
     config = tf.ConfigProto()
@@ -73,50 +73,71 @@ def train(csv_path,
     config.allow_soft_placement = True
     set_session(tf.Session(config=config))
 
-    print('input vol_shape is {}'.format(vol_shape))
+    # convert vol_shape (is list)
+    vol_shape = tuple(vol_shape)
+    model_config['vol_shape'] = vol_shape 
     
+    print('input vol_shape is {}'.format(vol_shape))
+
+    # check csv exists
     assert os.path.isfile(csv_path), 'csv not found at {}'.format(csv_path)
 
-    assert os.path.isfile(reg_model_file), 'reg model not found at {}'.format(reg_model_file)
-
+    # add csv path to config 
     csv_path = os.path.abspath(csv_path)
-
     model_config['csv_path'] = csv_path
 
-    model_dir = 'runs/'
-    model_dir += 'gan_{:%Y%m%d_%H%M}'.format(datetime.now())
-    model_dir += '_gpu={}'.format(str(gpu_id))
-    model_dir += '_bs={}'.format(batch_size)
-    model_dir += '_cl={}'.format(cri_base_nf)
-    model_dir += '_lr={}'.format(lr)
-    model_dir += '_b1={}'.format(beta_1)
-    model_dir += '_b2={}'.format(beta_2)
-    model_dir += '_ep={}'.format(epsilon)
-    model_dir += '_pl={}'.format(prior_lambda)
-    model_dir += '_lk={}'.format(leaky)
-    model_dir += '_bn={}'.format(batchnorm)
-    model_dir += '_vr={}'.format(vel_resize)
-    model_dir += '_is={}'.format(int_steps)
-    model_dir += '_cs={}'.format(cri_steps)
-    model_dir += '_rf={}'.format(cri_retune_freq)
-    model_dir += '_rs={}'.format(cri_retune_steps)
-    model_dir += '_sw={}'.format(sample_weights is not None)
-    model_dir += '_glw={}'.format(gen_loss_weights)
-    model_dir += '_clw={}'.format(cri_loss_weights)
-    model_dir += '_tag={}'.format(tag) if tag != '' else ''
+    # check regressor model file exists 
+    if reg_model_file:
+        msg = 'reg model file not found at {}'.format(reg_model_file)
+        assert os.path.isfile(reg_model_file), msg
+        reg_model_file = os.path.abspath(reg_model_file) 
+        model_config['reg_model_file'] = reg_model_file
+
+    # check classifier model file exists 
+    if clf_model_file:
+        msg = 'clf model file not found at {}'.format(clf_model_file)
+        assert os.path.isfile(clf_model_file), msg
+        clf_model_file = os.path.abspath(clf_model_file)
+        model_config['clf_model_file'] = clf_model_file
+
+    # stitch together run_dir name
+    run_dir = 'runs/'
+    run_dir += 'gan_{:%Y%m%d_%H%M}'.format(datetime.now())
+    run_dir += '_gpu={}'.format(str(gpu_id))
+    run_dir += '_bs={}'.format(batch_size)
+    run_dir += '_cl={}'.format(cri_base_nf)
+    run_dir += '_lr={}'.format(lr)
+    run_dir += '_b1={}'.format(beta_1)
+    run_dir += '_b2={}'.format(beta_2)
+    run_dir += '_ep={}'.format(epsilon)
+    run_dir += '_pl={}'.format(prior_lambda)
+    run_dir += '_lk={}'.format(leaky)
+    run_dir += '_bn={}'.format(batchnorm)
+    run_dir += '_vr={}'.format(vel_resize)
+    run_dir += '_is={}'.format(int_steps)
+    run_dir += '_cs={}'.format(cri_steps)
+    run_dir += '_rf={}'.format(cri_retune_freq)
+    run_dir += '_rs={}'.format(cri_retune_steps)
+    run_dir += '_sw={}'.format(sample_weights is not None)
+    run_dir += '_reg={}'.format(reg_model_file is not None)
+    run_dir += '_clf={}'.format(clf_model_file is not None)
+    run_dir += '_glw={}'.format(gen_loss_weights)
+    run_dir += '_clw={}'.format(cri_loss_weights)
+    run_dir += '_tag={}'.format(tag) if tag != '' else ''
     
-    model_dir = model_dir.replace(' ', '')
-    model_dir = model_dir.replace(',', '_')
+    run_dir = run_dir.replace(' ', '')
+    run_dir = run_dir.replace(',', '_')
 
-    print('model_dir is {}'.format(model_dir))
+    print('run_dir is {}'.format(run_dir))
 
+    # calculate flow_shape given the resize param
     flow_shape = tuple(int(d * vel_resize) for d in vol_shape)
 
-    valid_dir = os.path.join(model_dir, 'eval')
+    # create run dirs
+    if not os.path.isdir(run_dir):
+        os.mkdir(run_dir)
 
-    # prepare model folder
-    if not os.path.isdir(model_dir):
-        os.mkdir(model_dir)
+    valid_dir = os.path.join(run_dir, 'eval')
 
     if not os.path.isdir(valid_dir):
         os.mkdir(valid_dir)
@@ -140,22 +161,16 @@ def train(csv_path,
                                         vel_resize=vel_resize,
                                         int_steps=int_steps,
                                         reg_model_file=reg_model_file,
+                                        clf_model_file=clf_model_file,
                                         batchnorm=batchnorm,
                                         leaky=leaky)
       
-        cri_model_save_path = os.path.join(model_dir, 'cri_{:03d}.h5')
-        gen_model_save_path = os.path.join(model_dir, 'gen_{:03d}.h5')
+        cri_model_save_path = os.path.join(run_dir, 'cri_{:03d}.h5')
+        gen_model_save_path = os.path.join(run_dir, 'gen_{:03d}.h5')
  
         # save inital models
         cri_model.save(cri_model_save_path.format(0))
         gen_model.save(gen_model_save_path.format(0))
-       
-
-    # data generator
-    num_gpus = len(gpu_id.split(','))
-    assert np.mod(batch_size, num_gpus) == 0, \
-        'batch_size should be a multiple of the nr. of gpus. ' + \
-        'Got batch_size %d, %d gpus' % (batch_size, num_gpus)
 
     # load csv
     csv = pd.read_csv(csv_path)
@@ -169,7 +184,7 @@ def train(csv_path,
     
     # csv columns for img paths and labels
     img_keys = ['img_path_0', 'img_path_1']
-    lbl_keys = ['delta_t']
+    lbl_keys = ['delta_t', 'pat_dx_1']
 
     # datagens for training and validation
     train_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
@@ -180,39 +195,36 @@ def train(csv_path,
                             lbl_keys=lbl_keys, batch_size=batch_size,
                             sample=True, weights=sample_weights, split='eval')
 
-    # convert the delta to channel (for critic) and bin_repr (for ss in gen)
-    train_data = datagenerators.gan_gen(train_csv_data, max_delta, int_steps)
-    valid_data = datagenerators.gan_gen(valid_csv_data, max_delta, int_steps)
+    use_reg = reg_model_file is not None
+    use_clf = clf_model_file is not None
 
+    cri_train_data, gen_train_data = datagenerators.gan_generators(
+                                    csv_gen=train_csv_data, vol_shape=vol_shape,
+                                    flow_shape=flow_shape, max_delta=max_delta,
+                                    int_steps=int_steps, use_reg=use_reg,
+                                    use_clf=use_clf)
+
+    cri_valid_data, gen_valid_data = datagenerators.gan_generators(
+                                    csv_gen=valid_csv_data, vol_shape=vol_shape,
+                                    flow_shape=flow_shape, max_delta=max_delta,
+                                    int_steps=int_steps, use_reg=use_reg,
+                                    use_clf=use_clf)
 
     # write model_config to run_dir
-    config_path = os.path.join(model_dir, 'config.pkl')
+    config_path = os.path.join(run_dir, 'config.pkl')
     pickle.dump(model_config, open(config_path, 'wb'))
     
     print('model_config:')
     print(model_config)
 
-    # labels for train/predict
-    # dummy tensor for features, flow and kl loss, must have correct flow shape
-    feat_dummy = np.zeros((batch_size, 400))
-    flow_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)))
-   
-    # labels for critic ws loss
-    real = np.ones((batch_size, 1)) * (-1) # real labels
-    fake = np.ones((batch_size, 1))        # fake labels
-    avgd = np.ones((batch_size, 1))        # dummy labels for gradient penalty
-    zero = np.zeros((batch_size, 1))       # zero labels for age delta loss
- 
     # tboard callbacks
-    tboard_train = TensorBoardExt(log_dir=model_dir)
+    tboard_train = TensorBoardExt(log_dir=run_dir, use_reg=use_reg, use_clf=use_clf)
     tboard_train.set_model(gen_model)
 
-    tboard_valid = TensorBoardVal(log_dir=valid_dir, data=valid_data,
-                                  cri_model=cri_model, gen_model=gen_model,
-                                  freq=valid_freq, steps=valid_steps,
-                                  batch_size=batch_size, flow_dummy=flow_dummy,
-                                  feat_dummy=feat_dummy)
-
+    tboard_valid = TensorBoardVal(log_dir=valid_dir, use_reg=use_reg, use_clf=use_clf,
+                              cri_data=cri_valid_data, gen_data=gen_valid_data,
+                              cri_model=cri_model, gen_model=gen_model,
+                              freq=valid_freq, steps=valid_steps)
     tboard_valid.set_model(gen_model)
 
 
@@ -238,26 +250,15 @@ def train(csv_path,
                 
                 # train critic
                 for c_step in range(cri_steps_ep):
-                    
-                    imgs, lbls = next(train_data)
+                   
+                    inputs, labels, _ = next(cri_train_data)
+ 
+                    cri_logs = cri_model.train_on_batch(inputs, labels)
 
-                    cri_in = [imgs[0], imgs[1], lbls[1]] # xr, yr, db
-                    cri_true = [real, fake, avgd]
-
-                    cri_logs = cri_model.train_on_batch(cri_in, cri_true)
-
-                imgs, lbls = next(train_data)
-
-                gen_in = [imgs[0], imgs[1], lbls[1]] # xr, yr, db
-                gen_true = [real,       # wasserstein (yf)
-                            zero,       # L1 (a_yr_hat - a_yf_hat)
-                            imgs[0],    # L1 (xr - yr)
-                            flow_dummy, # kl (flow_params)
-                            flow_dummy, # dummy (flow)
-                            feat_dummy] # dummy (features)
+                inputs, labels, _ = next(gen_train_data)
 
                 # train generator
-                gen_logs = gen_model.train_on_batch(gen_in, gen_true)
+                gen_logs = gen_model.train_on_batch(inputs, labels)
 
                 # update tensorboard
                 tboard_train.on_epoch_end(abs_step, cri_logs, gen_logs)
@@ -278,7 +279,7 @@ if __name__ == "__main__":
                         help="path to data csv")
     parser.add_argument("--tag", type=str,
                         dest="tag", default='',
-                        help="tag to be added to model_dir")
+                        help="tag to be added to run_dir")
     parser.add_argument("--gpu", type=str, default=0,
                         dest="gpu_id", help="gpu id number")
     parser.add_argument("--sample_weights", type=str, default=None,
@@ -303,7 +304,9 @@ if __name__ == "__main__":
                         dest="prior_lambda", default=25,
                         help="prior_lambda regularization parameter")
     parser.add_argument("--reg_model", type=str,
-                        dest="reg_model_file", default='')
+                        dest="reg_model_file")
+    parser.add_argument("--clf_model", type=str,
+                        dest="clf_model_file")
     parser.add_argument("--cri_base_nf", type=int,
                         dest="cri_base_nf", default=8)
     parser.add_argument("--gen_loss_weights", type=float, nargs="+",
@@ -323,7 +326,7 @@ if __name__ == "__main__":
                         dest="cri_retune_freq", default=10,
                         help="frequency of critic retune epochs")
     parser.add_argument("--cri_retune_steps", type=int,
-                        dest="cri_retune_steps", default=25,
+                        dest="cri_retune_steps", default=5,
                         help="number of critic steps in retune epochs")
     parser.add_argument("--valid_freq", type=int,
                         dest="valid_freq", default=25,

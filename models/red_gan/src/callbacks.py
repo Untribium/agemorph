@@ -19,7 +19,7 @@ def make_image(tensor):
     return tf.Summary.Image(height=h, width=w, colorspace=c, encoded_image_string=image_string)
 
 
-def summaries(cri_logs, gen_logs):
+def summaries(cri_logs, gen_logs, use_reg, use_clf):
         
     summaries = {
         'cri_loss_total':   cri_logs[0],
@@ -28,21 +28,36 @@ def summaries(cri_logs, gen_logs):
         'cri_loss_gp':      cri_logs[3],
         'gen_loss_total':   gen_logs[0],
         'gen_loss_ws':      gen_logs[1],
-        'gen_loss_age':     gen_logs[2],
-        'gen_loss_l1':      gen_logs[3],
-        'gen_loss_kl':      gen_logs[4]
+        'gen_loss_l1':      gen_logs[2],
+        'gen_loss_kl':      gen_logs[3],
+        'gen_loss_sparse':  gen_logs[4]
     }
+
+    i = 7   
+ 
+    if use_reg:
+        summaries['gen_loss_age'] = gen_logs[i]
+        i += 1
+
+    if use_clf:
+        summaries['gen_loss_dx'] = gen_logs[i]
 
     return summaries
 
 
 class TensorBoardExt(TensorBoard):
     
-    def __init__(self, **kwargs):
+    def __init__(self, use_reg, use_clf, **kwargs):
+
+        self.use_reg = use_reg
+        self.use_clf = use_clf
+
         super(TensorBoardExt, self).__init__(**kwargs)
 
     def on_epoch_end(self, epoch, cri_logs, gen_logs):
-        logs = summaries(cri_logs, gen_logs)
+
+        logs = summaries(cri_logs, gen_logs, self.use_reg, self.use_clf)
+
         super(TensorBoardExt, self).on_epoch_end(epoch, logs)
 
 
@@ -68,25 +83,20 @@ class TensorBoardImage(TensorBoard):
 
 class TensorBoardVal(TensorBoardImage):
 
-    def __init__(self, cri_model, gen_model, data, freq, steps, batch_size,
-                    flow_dummy, feat_dummy, n_outputs=3, **kwargs):
+    def __init__(self, cri_data, gen_data, cri_model, gen_model, freq, steps,
+                                    use_reg, use_clf, n_outputs=3, **kwargs):
 
-        self.data = data
+        self.cri_data = cri_data
+        self.gen_data = gen_data
         self.freq = freq
         self.steps = steps
-        self.gen_model = gen_model
         self.cri_model = cri_model
+        self.gen_model = gen_model
 
-        self.flow_dummy = flow_dummy
-        self.feat_dummy = feat_dummy
+        self.use_reg = use_reg
+        self.use_clf = use_clf
 
         self.n_outputs = n_outputs
-
-        # critic labels 
-        self.real = np.ones((batch_size, 1)) * (-1) # real labels
-        self.fake = np.ones((batch_size, 1))        # fake labels
-        self.avgd = np.ones((batch_size, 1))        # dummy labels for gradient penalty
-        self.zero = np.zeros((batch_size, 1))       # zero labels for age delta loss
 
         super(TensorBoardVal, self).__init__(**kwargs)
 
@@ -96,37 +106,40 @@ class TensorBoardVal(TensorBoardImage):
         if epoch % self.freq != 0:
             return
 
-        # scalar summaries
+        # --- scalar summaries ---
         cri_logs_valid = np.zeros((self.steps, len(self.cri_model.outputs)+1))
         gen_logs_valid = np.zeros((self.steps, len(self.gen_model.outputs)+1))
 
         # run steps
         for v_step in range(self.steps):
 
-            imgs, lbls = next(self.data)
-
-            cri_in = [imgs[0], imgs[1], lbls[1]]
-            cri_true = [self.real, self.fake, self.avgd]
-            cri_logs_valid[v_step] = self.cri_model.test_on_batch(cri_in, cri_true)
+            inputs, labels, _ = next(self.cri_data)
+            cri_logs_valid[v_step] = self.cri_model.test_on_batch(inputs, labels)
             
-            gen_in = [imgs[0], imgs[1], lbls[1]]
-            gen_true = [self.real, self.zero, imgs[0], self.flow_dummy, self.flow_dummy, self.feat_dummy]
-            gen_logs_valid[v_step] = self.gen_model.test_on_batch(gen_in, gen_true)
+            inputs, labels, batch = next(self.gen_data)
+            gen_logs_valid[v_step] = self.gen_model.test_on_batch(inputs, labels)
        
         # take mean 
         cri_logs_valid = cri_logs_valid.mean(axis=0).tolist()
         gen_logs_valid = gen_logs_valid.mean(axis=0).tolist()
 
-        logs = summaries(cri_logs_valid, gen_logs_valid)
+        logs = summaries(cri_logs_valid, gen_logs_valid, self.use_reg, self.use_clf)
 
-        # image summaries
-        num_outputs = 3
+        # --- image summaries ---
 
         # predict y_hat and flow params
-        _, _, yf_gen, flow_params_gen, flow_gen, _ = self.gen_model.predict(gen_in)
+        gen_out = self.gen_model.predict(inputs)
 
-        outputs = zip(imgs[0], imgs[1], lbls[0], yf_gen, flow_params_gen, flow_gen)
-        outputs = list(outputs)
+        outputs = [
+                batch['img_path_0'],    # x
+                batch['img_path_1'],    # y
+                batch['delta_t'],       # delta scaled
+                gen_out[1],             # y_hat
+                gen_out[2],             # flow_params
+                gen_out[4]              # flow
+        ]
+
+        outputs = list(zip(*outputs))
 
         logs['gen_flow_mean'] = 0
         logs['gen_flow_std'] = 0
@@ -210,64 +223,14 @@ class TensorBoardVal(TensorBoardImage):
         flows_mean = np.concatenate(img_strips[2], axis=0)
         flows_std = np.concatenate(img_strips[3], axis=0)
 
-        sli = imgs[0].shape[2] // 2
+        sli_fs = batch['img_path_0'].shape[2] // 2  # full size
+        sli_vr = gen_out[2].shape[2] // 2           # vel resized
 
         img_logs = {
-            'scans': scans[:, sli, :, :],
-            'flows': flows[:, sli, :, :],
-            'flows_mean': flows_mean[:, sli // 2, :, :],
-            'flows_std': flows_std[:, sli // 2, :, :]
+            'scans': scans[:, sli_fs, :, :],
+            'flows': flows[:, sli_fs, :, :],
+            'flows_mean': flows_mean[:, sli_vr, :, :],
+            'flows_std': flows_std[:, sli_vr, :, :]
         }
             
-        ''' 
-
-        # delta indicator
-        lin = np.linspace(0, 1, imgs[0].shape[1])
-        ind = lbls[0][:, None] > lin[None, :]
-        ind = ind * 1.2 - 0.2
-        ind = ind[..., None].repeat(imgs[0].shape[2], axis=-1)
-        ind = ind[..., None].repeat(10, axis=-1)
-        ind = ind[..., None]
-
-        # combine scans and delta
-        channels = [imgs[0], imgs[1], yf_gen, ind]
-        scans = np.concatenate(channels, axis=3)[:num_outputs]
-        scans = np.concatenate(scans, axis=0)
-
-        # all flows
-        flow_mean = flow_gen[..., :3]
-        logs['gen_flow_mean'] = np.abs(flow_mean).mean()
-        flow_mean = normalize(flow_mean, axis=0)
-
-        flow_std = flow_gen[..., 3:]
-        flow_std = np.exp(flow_std)
-        logs['gen_flow_std'] = np.abs(flow_std).mean()
-        flow_std = normalize(flow_std, axis=0)
-       
-        # rgb flows
-        flow_mean_rgb = flow_mean[None, ...]
-        flow_std_rgb = flow_std[None, ...]
-
-        # extend grayscales to 3 channels so can be displayed alongside rgb
-        flow_mean = np.moveaxis(flow_mean, -1, 0)
-        flow_mean = flow_mean[..., None].repeat(3, axis=-1)
-        
-        flow_std = np.moveaxis(flow_std, -1, 0)
-        flow_std = flow_std[..., None].repeat(3, axis=-1)
-
-        # combine flows
-        channels = [flow_mean_rgb, flow_mean, flow_std_rgb, flow_std]
-        flows = np.concatenate(channels, axis=0)
-        flows = np.concatenate(flows, axis=3)[:num_outputs]
-        flows = np.concatenate(flows, axis=0)
-
-        # TODO use vel_resize param for flow
-        sli = imgs[0].shape[2] // 2
-
-        img_logs = {
-                'flows': flows[:, sli // 2, :, :],
-                'scans': scans[:, sli, :, :]
-        }
-
-        '''
         super(TensorBoardVal, self).on_epoch_end(epoch, logs, img_logs) 

@@ -12,48 +12,131 @@ import pandas as pd
 import nibabel as nib
 from .utils import to_bin
 
+def delta_bits(delta, max_delta, int_steps):
+   
+    # shift so 1111... ([1] * int_steps) corresponds to max_delta
+    shifted = delta * 2**(int_steps+1)
+    shifted = shifted.astype(int)
+
+    # convert to bits
+    bits = [to_bin(d[0], 16) for d in shifted]
+    
+    return np.array(bits)
+   
+ 
+def delta_channel(delta, vol_shape):
+
+    # slicer to reshape
+    slicer = (slice(None),)
+    slicer += (None,) * len(vol_shape) - 1
+
+    channel = np.ones(vol_shape, dtype=np.float32)
+    channel *= delta[slicer]
+
+    return channel
+   
+
+# returns two gens for GAN generator and critic
+def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg, use_clf):
+    
+    batch_size = next(csv_gen)['img_path_0'].shape[0]
+
+    # loss labels
+    feat_dummy = np.zeros((batch_size, 400))
+    flow_dummy = np.zeros((batch_size, *flow_shape, 1))
+    ws_real = np.ones((batch_size, 1)) * (-1)
+    ws_fake = np.ones((batch_size, 1))
+    ws_avgd = np.ones((batch_size, 1))
+    dt_zero = np.zeros((batch_size, 1))
+ 
+    def critic_gen():
+
+        while True:
+            batch = next(csv_gen)
+
+            # scale delta to [0, 1)
+            batch['delta_t'] /= max_delta+1
+
+            inputs = [batch['img_path_0'], batch['img_path_1']]
+            inputs += [delta_bits(batch['delta_t'], max_delta, int_steps)]
+            
+            if not use_reg:
+                inputs += [delta_channel(batch['delta_t'], vol_shape)]
+
+            labels = [ws_real, ws_fake, ws_avgd]
+           
+            yield inputs, labels, batch
+ 
+    def generator_gen():
+
+        while True:
+            batch = next(csv_gen)
+
+            # scale delta to [0, 1)
+            batch['delta_t'] /= max_delta+1
+
+            inputs = [batch['img_path_0'], batch['img_path_1']]
+            inputs += [delta_bits(batch['delta_t'], max_delta, int_steps)]
+            
+            if not use_reg:
+                inputs += [delta_channel(batch['delta_t'], vol_shape)]
+
+            labels = [ws_real, batch['img_path_0']] # ws, l1 (y_hat - x)
+            labels += [flow_dummy, flow_dummy]      # kl, l1 (mag)
+            labels += [flow_dummy, feat_dummy]      # flow, features
+           
+            if use_reg:
+                labels += [dt_zero]
+
+            if use_clf:
+                labels += [batch['pat_dx_1'] - 2]   # AD=3, MCI=2 in csv
+
+            yield inputs, labels, batch
+    
+    return critic_gen(), generator_gen()
+
 
 def gan_gen(csv_gen, max_delta, int_steps, max_steps=None):
-        '''
-        convert delta into bin representation used in generator ss steps.
-        number of bits is fixed to 16, each bit signifies whether that step
-        is applied to the total displacement
+    '''
+    convert delta into bin representation used in generator ss steps.
+    number of bits is fixed to 16, each bit signifies whether that step
+    is applied to the total displacement
 
-        max_steps:
-        drop batch if it requires more than max_steps squaring steps in the
-        vector field integration (to make sure we don't run out of memory)
-        '''
-        while(True):
+    max_steps:
+    drop batch if it requires more than max_steps squaring steps in the
+    vector field integration (to make sure we don't run out of memory)
+    '''
+    while(True):
 
-            imgs, lbls = next(csv_gen) 
+        imgs, lbls = next(csv_gen) 
 
-            lbls[0] = lbls[0][:, 0] # squeeze last dim
+        lbls[0] = lbls[0][:, 0] # squeeze last dim
+        
+        lbls[0] = lbls[0] / (max_delta + 1) # rescale to [0,1)
+        
+        delta_shift = lbls[0] *  2**(int_steps + 1)
+        delta_shift = delta_shift.astype(int)
+
+        delta_bits = [to_bin(d, 16) for d in delta_shift]
+        delta_bits = np.array(delta_bits)
+
+        if max_steps:
+            # total number of squaring steps
+            sum_steps = delta_bits * np.arange(1, 17)[None, :]
+            sum_steps = sum_steps.max(axis=1).sum()
+
+            print(sum_steps)
+            if sum_steps > max_steps:
+                continue
             
-            lbls[0] = lbls[0] / (max_delta + 1) # rescale to [0,1)
-            
-            delta_shift = lbls[0] *  2**(int_steps + 1)
-            delta_shift = delta_shift.astype(int)
+        # insert bits after delta
+        lbls[1:1] = [delta_bits]
 
-            delta_bits = [to_bin(d, 16) for d in delta_shift]
-            delta_bits = np.array(delta_bits)
+        # channel
+        delta_channel = lbls[0].reshape((-1, 1, 1, 1, 1))
+        lbls[2:2] = [np.ones_like(imgs[0], dtype=np.float32) * delta_channel]
 
-            if max_steps:
-                # total number of squaring steps
-                sum_steps = delta_bits * np.arange(1, 17)[None, :]
-                sum_steps = sum_steps.max(axis=1).sum()
-
-                print(sum_steps)
-                if sum_steps > max_steps:
-                    continue
-                
-            # insert bits after delta
-            lbls[1:1] = [delta_bits]
-
-            # channel
-            delta_channel = lbls[0].reshape((-1, 1, 1, 1, 1))
-            lbls[2:2] = [np.ones_like(imgs[0], dtype=np.float32) * delta_channel]
-
-            yield imgs, lbls
+        yield imgs, lbls
 
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
@@ -122,10 +205,10 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                 batch = csv.sample(batch_size, weights=weights)
             else:
                 batch = csv.iloc[b*batch_size:(b+1)*batch_size]
- 
-            # MR scans
-            imgs = []
 
+            out = {}
+ 
+            # scans
             for img_key in img_keys:
                 concat = []
                 
@@ -134,11 +217,9 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                     img = img[np.newaxis, ..., np.newaxis] # add batch_dim and channel_dim
                     concat.append(img)
 
-                imgs.append(np.concatenate(concat, axis=0))
+                out[img_key] = np.concatenate(concat, axis=0)
 
-            # lbls (e.g. pat_dx, pat_age, img_id)
-            lbls = []
-
+            # labels
             for lbl_key in lbl_keys:
                 concat = []
 
@@ -147,9 +228,9 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                     lbl = lbl[np.newaxis, ...] # add batch_dim
                     concat.append(lbl)
 
-                lbls.append(np.concatenate(concat, axis=0))
+                out[lbl_key] = np.concatenate(concat, axis=0)
 
-            yield imgs, lbls
+            yield out
 
         epoch += 1
 

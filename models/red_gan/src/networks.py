@@ -21,6 +21,7 @@ from keras.layers import Layer
 from keras.layers import Conv3D, Activation, Input, UpSampling3D
 from keras.layers import concatenate, add, subtract
 from keras.layers import ReLU, Reshape, Lambda, BatchNormalization
+from keras.losses import sparse_categorical_crossentropy
 from keras.initializers import RandomNormal
 import keras.initializers
 from functools import partial
@@ -37,7 +38,7 @@ import neuron.utils as nrn_utils
 
 def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimizer, 
                cri_base_nf, gen_loss_weights, gen_optimizer, vel_resize, int_steps,
-               reg_model_file, batchnorm, leaky):
+               reg_model_file, clf_model_file, batchnorm, leaky):
 
     vol_shape = tuple(vol_shape)
     
@@ -53,30 +54,53 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     a = avg
     D = critic output
     """
-   
-    # --- regressor (pre-trained) ---
-    reg_net = keras.models.load_model(reg_model_file)
-    reg_net.trainable = False
+    
+    # --- age regressor (pre-trained) ---
+    if reg_model_file:
+        reg_net = keras.models.load_model(reg_model_file)
+        reg_net.trainable = False
+ 
+    # --- dx classifier (pre-trained) ---
+    if clf_model_file:
+        clf_net = keras.models.load_model(reg_model_file)
+        clf_net.trainable = False
 
     # --- critic ---
 
     gen_net.trainable = False # freeze generator in critic
 
+    # critic inputs
     xr_cri = Input(shape=vol_shape + (1,)) # real 1st visit
     yr_cri = Input(shape=vol_shape + (1,)) # real 2nd visit
-    br_cri = Input(shape=(16,))  # real delta (binary)
+    dt_cri_bin = Input(shape=(16,))  # delta (binary)
 
-    cri_inputs = [xr_cri, yr_cri, br_cri]
-    
-    # generate image
-    yf_cri, _, _, _ = gen_net([xr_cri, br_cri])
+    cri_inputs = [xr_cri, yr_cri, dt_cri_bin]
 
-    # interpolated sample
+    # generate image using generator
+    gen_out = gen_net([xr_cri, dt_cri_bin])
+    yf_cri = gen_out[0]
+
+    # interpolate sample for gradient penalty
     ya_cri = RandomWeightedAverage(batch_size=batch_size)([yr_cri, yf_cri])
 
-    Dr_cri = cri_net([xr_cri, yr_cri])
-    Df_cri = cri_net([xr_cri, yf_cri])
-    Da_cri = cri_net([xr_cri, ya_cri])
+    # critic inputs for real, fake and interpolated
+    cri_in_r = [xr_cri, yr_cri]
+    cri_in_f = [xr_cri, yf_cri]
+    cri_in_a = [xr_cri, ya_cri]
+    
+    # add delta channel to critic inputs if we're not using an age regressor
+    if not reg_model_file:
+        dt_cri_cnl = Input(shape=vol_shape + (1,))  # delta (channel)
+        
+        cri_inputs.append(dt_cri_cnl)
+
+        cri_in_r.append(dt_cri_cnl)
+        cri_in_f.append(dt_cri_cnl)
+        cri_in_a.append(dt_cri_cnl)
+    
+    Dr_cri = cri_net(cri_in_r)
+    Df_cri = cri_net(cri_in_f)
+    Da_cri = cri_net(cri_in_a)
 
     cri_outputs = [Dr_cri, Df_cri, Da_cri]
 
@@ -99,31 +123,53 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
 
     xr_gen = Input(shape=vol_shape + (1,)) # real 1st visit
     yr_gen = Input(shape=vol_shape + (1,)) # real 2nd visit
-    br_gen = Input(shape=(16,))  # delta (binary)
+    dt_gen_bin = Input(shape=(16,))  # delta (binary)
     
-    gen_inputs = [xr_gen, yr_gen, br_gen]
+    gen_inputs = [xr_gen, yr_gen, dt_gen_bin]
 
     # predict y_hat
-    yf_gen, flow_params_gen, flow_gen, features = gen_net([xr_gen, br_gen])
-   
+    gen_out = gen_net([xr_gen, dt_gen_bin])
+    yf_gen = gen_out[0]
+
+    # critic inputs
+    cri_in_f = [xr_gen, yf_gen]
+
+    # add delta channel to critic inputs if we're not using an age regressor
+    if not reg_model_file:
+        dt_gen_cnl = Input(shape=vol_shape + (1,))  # delta (channel)
+        gen_inputs.append(dt_gen_cnl)
+
+        cri_in_f.append(dt_gen_cnl)
+
     # get wasserstein loss
-    Df_gen = cri_net([xr_gen, yf_gen])
+    Df_gen = cri_net(cri_in_f)
 
-    # get age loss
-    a_yr_gen = reg_net([yr_gen])
-    a_yf_gen = reg_net([yf_gen])
-    a_df_gen = subtract([a_yf_gen, a_yr_gen])
-
-    gen_outputs = [Df_gen, a_df_gen, yf_gen, flow_params_gen, flow_gen, features]
+    gen_outputs = [Df_gen, *gen_out]
     
-    gen_model = Model(inputs=gen_inputs, outputs=gen_outputs)
-
     gen_loss = [loss_class.wasserstein_loss,
                 loss_class.l1_loss,
-                loss_class.l1_loss,
                 loss_class.kl_loss,
+                loss_class.l1_loss,
                 loss_class.dummy_loss,
                 loss_class.dummy_loss]
+
+    # calculate age regressor delta and add to outputs
+    if reg_model_file:
+        reg_yr_gen = reg_net([yr_gen])
+        reg_yf_gen = reg_net([yf_gen])
+        reg_dt_gen = subtract([reg_yf_gen, reg_yr_gen])
+
+        gen_outputs.append(reg_dt_gen)
+        gen_loss.append(loss_class.l1_loss)
+    
+    # calculate dx classifier logits and add to outputs 
+    if clf_model_file:
+        clf_yf_gen = clf_net([yf_gen]) # dx logits [mci, ad]
+        
+        gen_outputs.append(clf_yf_gen)
+        gen_loss.append(sparse_categorical_crossentropy)
+ 
+    gen_model = Model(inputs=gen_inputs, outputs=gen_outputs)
 
     gen_model.compile(loss=gen_loss, optimizer=gen_optimizer, loss_weights=gen_loss_weights)
 
@@ -251,6 +297,8 @@ def generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky):
                 bias_initializer=keras.initializers.Constant(value=-10))(x_out)
 
     flow_params = concatenate([flow_mean, flow_log_sigma])
+    
+    flow_magnitude = Magnitude()(flow_mean)
 
     # sample velocity field (using reparameterization)
     z_sample = Sample(name='z_sample')([flow_mean, flow_log_sigma])
@@ -264,7 +312,7 @@ def generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky):
 
     y = SpatialTransformer(interp_method='linear', indexing='ij')([x_in, flow])
   
-    outputs = [y, flow_params, flow, features]
+    outputs = [y, flow_params, flow_magnitude, flow, features]
 
     return Model(inputs=inputs, outputs=outputs)
 
@@ -379,6 +427,24 @@ def trf_resize(trf, vel_resize, name='flow'):
     else: # multiply first to save memory (multiply in smaller space)
         trf = Rescale(1 / vel_resize, name=name+'_tmp')(trf)
         return nrn_layers.Resize(1/vel_resize, name=name)(trf)
+
+
+class Magnitude(Layer):
+    """
+    Keras Layer: calculate magnitude of flow
+    """
+
+    def __init__(self, **kwargs):
+        super(Magnitude, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        super(Magnitude, self).build(input_shape)
+
+    def call(self, x):
+        return K.sqrt(K.sum(x * x, axis=-1, keepdims=True))
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[:-1] + (1,)
 
 
 class Sample(Layer):
