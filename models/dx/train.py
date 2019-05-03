@@ -12,9 +12,9 @@ import numpy as np
 from keras.backend.tensorflow_backend import set_session
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint, TensorBoard
+from keras.losses import sparse_categorical_crossentropy
 from keras.metrics import sparse_categorical_accuracy
-from keras.losses import mean_absolute_error, sparse_categorical_crossentropy
-from keras.utils import multi_gpu_model, Progbar
+from keras.utils import multi_gpu_model
 
 # project imports
 from src import datagenerators, networks
@@ -25,6 +25,7 @@ def train(csv_path,
           gpu_id,
           epochs,
           steps_per_epoch,
+          vol_shape,
           batch_size,
           lr,
           beta_1,
@@ -32,8 +33,9 @@ def train(csv_path,
           epsilon,
           layers,
           batchnorm,
-          valid_steps,
-          valid_freq):
+          maxpool,
+          leaky,
+          valid_steps):
 
     """
     model training function
@@ -48,6 +50,8 @@ def train(csv_path,
     :param bidir: logical whether to use bidirectional cost function
     """
 
+    vol_shape = tuple(vol_shape)
+
     model_config = locals()
 
     assert len(layers) % 2 == 0, "layers must have even length"
@@ -57,10 +61,16 @@ def train(csv_path,
     csv_path = os.path.abspath(csv_path)
     model_config['csv_path'] = csv_path
 
-    vol_shape = (80, 96, 80)
-    model_config['vol_shape'] = vol_shape
-
     print('input vol_shape is {}'.format(vol_shape))
+
+    # gpu handling
+    gpu = '/gpu:%d' % 0 # gpu_id
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    config.allow_soft_placement = True
+    set_session(tf.Session(config=config))
+
 
     model_dir = './runs/'
     model_dir += 'clf_{:%Y%m%d_%H%M}'.format(datetime.now())
@@ -71,6 +81,8 @@ def train(csv_path,
     model_dir += '_b2={}'.format(beta_2)
     model_dir += '_ep={}'.format(epsilon)
     model_dir += '_bn={}'.format(batchnorm)
+    model_dir += '_mp={}'.format(maxpool)
+    model_dir += '_lk={}'.format(leaky)
     model_dir += '_ls={}'.format(layers)
     model_dir += '_tag={}'.format(tag) if tag != '' else ''
 
@@ -83,23 +95,9 @@ def train(csv_path,
     layers = list(zip(layers[0::2], layers[1::2]))
     print(layers)
 
-
-    valid_dir = os.path.join(model_dir, 'eval')
-
     # prepare model folder
     if not os.path.isdir(model_dir):
         os.mkdir(model_dir)
-
-    if not os.path.isdir(valid_dir):
-        os.mkdir(valid_dir)
-
-    # gpu handling
-    gpu = '/gpu:%d' % 0 # gpu_id
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.allow_soft_placement = True
-    set_session(tf.Session(config=config))
 
     # prepare callbacks
     save_file_name = os.path.join(model_dir, 'clf_{epoch:04d}.h5')
@@ -111,12 +109,11 @@ def train(csv_path,
         model_opt = Adam(lr=lr, beta_1=beta_1, beta_2=beta_2, epsilon=epsilon)
 
         # model
-        model = networks.classifier_net(vol_shape, layers, batchnorm)
+        model = networks.classifier_net(vol_shape, layers, batchnorm, leaky, maxpool)
 
         # save first iteration
         model.save(save_file_name.format(epoch=0))
 
-        model_losses = [sparse_categorical_crossentropy]
 
     # data generator
     nb_gpus = len(gpu_id.split(','))
@@ -128,6 +125,8 @@ def train(csv_path,
     img_keys = ['img_path']
     lbl_keys = ['pat_dx']
 
+    # data generators
+    # also train on conversion set, doesn't impact gen performance
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
                               sample=True, split='train')
@@ -147,7 +146,7 @@ def train(csv_path,
     tboard_callback = TensorBoard(log_dir=model_dir)
     tboard_callback.set_model(model)
 
-    pred_callback = PredictionCallback(predi_data, update_freq=10)
+    pred_callback = PredictionCallback(predi_data, update_freq=5)
 
     # fit model
     with tf.device(gpu):
@@ -163,8 +162,7 @@ def train(csv_path,
             mg_model = model
 
         mg_model.compile(optimizer=model_opt,
-                         loss=model_losses,
-                         loss_weights=[1],
+                         loss=[sparse_categorical_crossentropy],
                          metrics=[sparse_categorical_accuracy])
 
         mg_model.fit_generator(train_data,
@@ -185,6 +183,8 @@ if __name__ == "__main__":
                         dest="gpu_id", help="gpu id number")
     parser.add_argument("--tag", type=str, default='',
                         dest="tag", help="tag added to run dir")
+    parser.add_argument("--vol_shape", type=int, nargs="+",
+                        dest="vol_shape", default=[80, 96, 80])
     parser.add_argument("--lr", type=float,
                         dest="lr", default=0.0001, help="learning rate")
     parser.add_argument("--beta1", type=float,
@@ -204,15 +204,14 @@ if __name__ == "__main__":
                         help="batch_size")
     parser.add_argument("--layers", dest="layers", type=int, nargs="+",
                         help="pairs of channel, strides for each layer",
-                        default=[4,1,16,2,16,1,64,2,64,1,128,2,128,1,256,2,256,1])
-    parser.add_argument("--valid_steps", type=int,
-                        dest="valid_steps", default=100,
-                        help="valid_steps")
-    parser.add_argument("--valid_freq", type=int,
-                        dest="valid_freq", default=50,
-                        help="valid_freq")
+                        default=[8,2,32,2,64,1,64,2,128,1,128,1,256,1,256,1])
+    parser.add_argument("--valid_steps", type=int, default=50,
+                        dest="valid_steps", help="valid_steps")
+    parser.add_argument("--leaky", type=float, default=0.0,
+                        dest="leaky", help="leakiness of ReLU, float >= 0")
     parser.add_argument("--batchnorm", dest="batchnorm", action="store_true")
-    parser.set_defaults(batchnorm=False)
+    parser.add_argument("--maxpool", dest="maxpool", action="store_true")
+    parser.set_defaults(batchnorm=False, maxpool=False)
 
     args = parser.parse_args()
     train(**vars(args))
