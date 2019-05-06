@@ -1,8 +1,46 @@
-\chapter{Diffeomorphic Generative Model}
+\chapter{Generative Diffeomorphic Deformation Model}
 
 This section discusses the general architecture of our model. In a first step, we examine the brain registration model proposed in \cite{voxelmorph} and discuss its applicability to the generative brain aging problem. We then detail our modifications to this model and the motivations
 
+Diffeomorphic transformations are differentiable and invertible and therefore topology preserving
+diffeomorphism: what is it, why do we want it?
+
+diffeomorphism, resulting in an invertible and therefore topology preserving 
+
 \section{Voxelmorph}
+In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $\Phi \circ x$ is similar to $y$.
+Dalca et al propose a deep learning architecture
+%based on the concept of a Variational Autoencoder (VAE)
+to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
+\begin{equation} \label{eq:ODE}
+	\frac{\partial \Phi^{(t)}}{\partial t} = v(\Phi^{(t)})
+\end{equation}
+
+where $\Phi^{(0)} = id$ is the identity transformation and t is time.
+The final deformation field $\Phi^{(1)}$ is then obtained by integrating the field $v$ over time $t = [0, 1]$ which is computed numerically using the scaling and squaring method.\\
+In group theory, $v$ is a member of the Lie algebra and is exponentiated to produce $\Phi^{(1)} = \exp(v)$.
+The collection $\{\Phi^{(t)}\}_{t \in [0,1]}$ forms a one-parameter subgroup of diffeomorphisms and therefore for any scalars $t$ and $t'$ we have 
+\begin{equation}
+	\exp((t + t')v) = \exp(tv) \circ \exp(t'v)
+\end{equation}
+
+where $\circ$ is a composition map associated with the Lie group. Consequently, we can then use the recurrence $\Phi^{(1/2^{(t-1)})} = \Phi^{(1/2^{t})} \circ \Phi^{(1/2^{t})}$ starting from $\Phi^{(1/2^T)}$ to obtain $\Phi^{(1)} = \Phi^{(1/2)} \circ \Phi^{(1/2)}$ where $T$ is chosen such that $v \approx 0$.
+
+The model uses a variational inference method to generate a stationary displacement field $z$ which defines the deformation $\Phi_z$ through the ODE (\ref{eq:ODE}). The prior probabilty of $z$ is modeled as
+\begin{equation}
+	p(z) = \mathcal{N}(z; 0, \Sigma_z)
+\end{equation}
+
+Spatial smoothness of z is is encouraged by letting ${\Sigma_z^{-1} = \Lambda_z = \lambda L}$ where $\Lambda_z$ is a precision matrix, $L$ is the Laplacian of a neighborhood graph defined as $L = D - A$, with graph degree matrix $D$ and voxel adjacency matrix $A$, and $\lambda$ denotes a parameter controlling the scale of the velocity field.
+
+The target image $y$ is interpreted as a noisy observation of the warped image~$x$
+\begin{equation}
+	p(y|z;x) = \mathcal{N}(y; x \circ \Phi_z, \sigma^2 \mathbbm{I})
+\end{equation}
+
+with $\sigma^2$ reflecting the variance of the additive noise.
+
+Finally, a likely registration field $\Phi_z$ is obtained by sampling $z$ from the posterior distribution $p(z | x; y)$. Since this distribution is intractable in this setting, we use a variational approach and introduce 
 
 VAE
 
@@ -12,13 +50,20 @@ VAE
 
 
 \begin{equation}
-	\mathcal{L}_{rec} = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ] 
-	= \frac{1}{2 \sigma^2 K} \mathlarger{\sum_{k}} \norm{\mathbf{x} - \mathbf{y} \circ \Phi_{z_{k}}}^{2}
+	\begin{split}
+		\boldsymbol{\varphi} \\
+		\boldsymbol{\phi} \\
+		\mathcal{L}_{rec}
+		& = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ] \\[10pt]
+		& = \frac{1}{2 \sigma^2 K} \mathlarger{\sum_{k}} \norm{\mathbf{x} - \mathbf{y} \circ \Phi_{z_{k}}}^{2}
+	\end{split}
 \end{equation}
 
 \begin{equation}
-	\mathcal{L}_{KL} = 
-		\text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] = 
+	\begin{split}
+		\mathcal{L}_{KL} & =
+		\text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] \\[10pt]
+		& = 
 		\frac{1}{2} \bigg[
 		\underbrace{
 			tr( \lambda \mathbf{D} \Sigma_{z | x; y} - \log \abs{ \Sigma_{z | x; y} } ) \vphantom{\mu_{z | x; y}^{T}}
@@ -26,6 +71,7 @@ VAE
 		\underbrace{
 			\mu_{z | x; y}^{T} \Lambda_{z} \mu_{z | x; y}
 		}_{\text{precision term}} \bigg]
+	\end{split}
 \end{equation}
 
 \begin{equation}
@@ -44,6 +90,13 @@ VAE
 
 
 
+\section{Adaptation}
+supervised vs unsupervised, 2 inputs vs 1
+
+\subsection{Generative Adversarial Setting}
+GAN vs VAE (training loss in VAE? see experiments)
+smaller scale of changes
+
 \begin{equation}
 	\mathcal{L}_{GAN}(M, D) = \E _ { x \sim p_d(x | c = 0) } [ D (x) ] 
 	 - \E _ { x \sim p_d(x | c = 1) } [ D (x + M(x)) ].
@@ -57,18 +110,27 @@ VAE
 	M^* = \argmin_M \max_{D \in \mathcal{D}} \mathcal{L}_{GAN}(M, D) + \lambda \mathcal{L}_{reg} (M),
 \end{equation}
 
+where $\mathcal{D}$ is the set of 1-Lipschitz functions.
 
-\section{Adaptation}
-supervised vs unsupervised, 2 inputs vs 1
 
-\subsection{Generative Adversarial Networks}
-GAN vs VAE (training loss in VAE? see experiments)
-smaller scale of changes
+Similar to \cite{VAGAN} we additionally introduce a similarity loss $\mathcal{L}_{sim}$ defined as the $L_1$ difference between the original image $x$ and the warped image $\hat{y} = x \circ \Phi$
+\begin{equation}
+	\mathcal{L}_{sim} = \norm{\hat{y} - x}_1
+\end{equation}
+
+Finally, we add a loss term to encourage sparseness of the velocity fields
+\begin{equation}
+	\mathcal{L}_{sparse} = \norm{\mu_z}_1
+\end{equation}
+
 
 \subsection{Arbitrary Time Step Scaling and Squaring}
 maths, some plots
 introduce problem of arbitrary time step
-introdice solution, proof
+introduce solution, proof
+
+want to learn from more than just a single time step.
+scaling and squaring as described to obtain phi(1) but can be used to get also phi(1/powers2) straightforward. However, data pairs don't necessarily match. Could do iteratively (cite wegmayr) but tradeoff between small step and high accuracy/data availability vs large step and computational viability. 
 
 \chapter{Applications}
 
