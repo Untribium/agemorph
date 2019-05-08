@@ -1,26 +1,30 @@
-\chapter{Generative Diffeomorphic Deformation Model}
+\chapter{Generative Diffeomorphic Deformation Models}
+Generative models have been successfully applied in a wide range of medical image analysis tasks such as TODO list some applications. 
 
-This section discusses the general architecture of our model. In a first step, we examine the brain registration model proposed in \cite{voxelmorph} and discuss its applicability to the generative brain aging problem. We then detail our modifications to this model and the motivations
+Diffeomorphic deformations of particular interest due to the organic nature and modeling of gradual changes
+Contrasts with additive changes in e.g. classic CNN
 
 Diffeomorphic transformations are differentiable and invertible and therefore topology preserving
-diffeomorphism: what is it, why do we want it?
 
-diffeomorphism, resulting in an invertible and therefore topology preserving 
+diffeomorphism important because of understanding/grasp of processes
+
+
+In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{voxelmorph} and then discuss our adaptation for the generative brain aging task.
 
 \section{Voxelmorph}
-In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $\Phi \circ x$ is similar to $y$.
-Dalca et al propose a deep learning architecture
-%based on the concept of a Variational Autoencoder (VAE)
-to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
+\label{chap:voxelmorph}
+In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $x \circ \Phi$ is similar to $y$.
+Dalca et al propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
 \begin{equation} \label{eq:ODE}
 	\frac{\partial \Phi^{(t)}}{\partial t} = v(\Phi^{(t)})
 \end{equation}
 
 where $\Phi^{(0)} = id$ is the identity transformation and t is time.
-The final deformation field $\Phi^{(1)}$ is then obtained by integrating the field $v$ over time $t = [0, 1]$ which is computed numerically using the scaling and squaring method.\\
+The final deformation field $\Phi^{(1)}$ is then obtained by integrating the field $v$ over time $t = [0, 1]$, which is computed numerically using the scaling and squaring method.
+
 In group theory, $v$ is a member of the Lie algebra and is exponentiated to produce $\Phi^{(1)} = \exp(v)$.
-The collection $\{\Phi^{(t)}\}_{t \in [0,1]}$ forms a one-parameter subgroup of diffeomorphisms and therefore for any scalars $t$ and $t'$ we have 
-\begin{equation}
+The collection $\{\Phi^{(t)}\}_{t \; \in \; [0,1]}$ forms a one-parameter subgroup of diffeomorphisms and therefore for any scalars $t$ and $t'$ we have 
+\begin{equation} \label{eq:vox_oneparamsubgroup}
 	\exp((t + t')v) = \exp(tv) \circ \exp(t'v)
 \end{equation}
 
@@ -40,31 +44,32 @@ The target image $y$ is interpreted as a noisy observation of the warped image~$
 
 with $\sigma^2$ reflecting the variance of the additive noise.
 
-Finally, a likely registration field $\Phi_z$ is obtained by sampling $z$ from the posterior distribution $p(z | x; y)$. Since this distribution is intractable in this setting, we use a variational approach and introduce 
-
-VAE
-
+A likely registration field $\Phi_z$ can then obtained by sampling $z$ from the posterior distribution $p(z | x; y)$.
+However, computing this distribution is intractable in this setting and hence a variational approach is used where $z$ is sampled from an approximate posterior probability $q_\psi(z | x; y)$ parametrized by $\psi$. The distribution is modeled as a multivariate normal
 \begin{equation}
-	\mathcal{L}(\psi; \bold{x}, \bold{y}) = \mathcal{L}_{rec} + \mathcal{L}_{KL} + \text{const} 
+	q_\psi(z | x; y) = \mathcal{N}(z; \mu_{z | x, y}, \Sigma_{z | x, y})
 \end{equation}
 
-
+and approximated by minimizing the KL divergence
 \begin{equation}
 	\begin{split}
-		\boldsymbol{\varphi} \\
-		\boldsymbol{\phi} \\
-		\mathcal{L}_{rec}
-		& = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ] \\[10pt]
-		& = \frac{1}{2 \sigma^2 K} \mathlarger{\sum_{k}} \norm{\mathbf{x} - \mathbf{y} \circ \Phi_{z_{k}}}^{2}
+		  &\min_\psi KL [ q_\psi(z | x; y) || p(z | x; y) ] \\
+		= &\min_\psi KL [ q_\psi(z | x; y) || p(z) ] - \E_q [ \log p(y | z; x) ]
 	\end{split}
 \end{equation}
 
-\begin{equation}
+The paramaters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN) which is trained using the Adam optimizer \cite{Adam}. 
+
+The complete loss function can be separated into three terms denoted as follows
+\begin{equation} \label{eq:vox_loss}
 	\begin{split}
-		\mathcal{L}_{KL} & =
-		\text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] \\[10pt]
-		& = 
-		\frac{1}{2} \bigg[
+		\mathcal{L}(\psi; \mathbf{x}, \mathbf{y})
+		& = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ]
+		+ \text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] \\[12pt]
+		& = \underbrace{
+			\frac{1}{2 \sigma^2} \norm{\mathbf{y} - \mathbf{x} \circ \Phi_{z}}^{2} \vphantom{\frac{1}{2_{2_2}}}
+		}_{\text{reconstruction term}} \\[6pt]
+		& + \frac{1}{2} \bigg[
 		\underbrace{
 			tr( \lambda \mathbf{D} \Sigma_{z | x; y} - \log \abs{ \Sigma_{z | x; y} } ) \vphantom{\mu_{z | x; y}^{T}}
 		}_{\text{sigma term}} +
@@ -72,6 +77,14 @@ VAE
 			\mu_{z | x; y}^{T} \Lambda_{z} \mu_{z | x; y}
 		}_{\text{precision term}} \bigg]
 	\end{split}
+\end{equation}
+
+The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$.
+
+TODO network architecture
+
+\begin{equation}
+	\mathcal{L}(\psi; x, y) = \mathcal{L}_{rec} + \mathcal{L}_{KL} + \text{const} 
 \end{equation}
 
 \begin{equation}
@@ -90,12 +103,23 @@ VAE
 
 
 
-\section{Adaptation}
-supervised vs unsupervised, 2 inputs vs 1
+\section{Adaptation for Brain Aging}
+While the tasks of brain registration and generative brain aging may not appear to have much in common at first, both can be described in terms of learning a deformation function. As such, an approach suited to the brain registration task can presumably be adapted to suit brain aging as well. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
+
+Most importantly, the brain registration task as defined in \cite{voxelmorph} and described above is an unsupervised learning problem where both the source image $x$ and the target image $y$ are available in the prediction step. Conversely, since the goal of the brain aging task is to predict the future state of $x$, the aged target image $y$ is only available in training and therefore cannot be a part of the model's inputs.
+
+Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale, meaning that the loss function in \autoref{eq:vox_loss} and the reconstruction term in particular may not represent an effective objective.
+
+Finally, while intermediate deformations $\Phi^{(t)}$ for time steps $t \notin \{0, 1\}$ are not of primary interest in the brain registration task, the ability to predict $\hat y^{(t)} = x \circ \Phi_z^{(t)}$ for different $t$ promises valuable insights into the progression of neurodegenerative diseases as well as the brain's aging process in general.
+Furthermore, the ability to train on image pairs with differing time steps $t$ is also crucial as the number of image pairs for any particular $t$ is very limited.
 
 \subsection{Generative Adversarial Setting}
+As described above, the generator 
 GAN vs VAE (training loss in VAE? see experiments)
 smaller scale of changes
+
+As a result, without access to $y$, any differences between source $x$ and target $y$ that are not aging-related, e.g. scanner induced artifacts, alignment issues or differences caused by preprocessing (e.g. skull fragements), are essentially impossible to predict.
+
 
 \begin{equation}
 	\mathcal{L}_{GAN}(M, D) = \E _ { x \sim p_d(x | c = 0) } [ D (x) ] 
@@ -112,25 +136,40 @@ smaller scale of changes
 
 where $\mathcal{D}$ is the set of 1-Lipschitz functions.
 
-
-Similar to \cite{VAGAN} we additionally introduce a similarity loss $\mathcal{L}_{sim}$ defined as the $L_1$ difference between the original image $x$ and the warped image $\hat{y} = x \circ \Phi$
+Similar to \cite{VAGAN} we additionally introduce a similarity loss $\mathcal{L}_{sim}$ defined as the $L_1$ difference between the original image $x$ and the warped image $\hat y = x \circ \Phi_z$
 \begin{equation}
-	\mathcal{L}_{sim} = \norm{\hat{y} - x}_1
+	\mathcal{L}_{sim}( x, \hat y ) = \norm{ \hat y - x }_1
 \end{equation}
 
 Finally, we add a loss term to encourage sparseness of the velocity fields
 \begin{equation}
-	\mathcal{L}_{sparse} = \norm{\mu_z}_1
+	\mathcal{L}_{sparse}( \mu_z ) = \norm{\mu_z}_1
 \end{equation}
 
 
 \subsection{Arbitrary Time Step Scaling and Squaring}
-maths, some plots
-introduce problem of arbitrary time step
-introduce solution, proof
+The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration where intermediate steps are not a primary interest. However, for the supervised brain aging problem, the availability of training data directly depends on the ability to train on different $t$. 
 
-want to learn from more than just a single time step.
-scaling and squaring as described to obtain phi(1) but can be used to get also phi(1/powers2) straightforward. However, data pairs don't necessarily match. Could do iteratively (cite wegmayr) but tradeoff between small step and high accuracy/data availability vs large step and computational viability. 
+One simple way to cirumvent these problems is to drop scaling and squaring altogether, instead iteratively composing the deformation field until the desired time step is reached
+\begin{equation}
+	\Phi^{(t)} =
+	\underbrace{
+		\Phi^{(1 / 2^T)} \, \circ \, \ldots \, \circ \, \Phi^{(1 / 2^T)} \vphantom{\Phi^{(1 / 2^T)}_2}
+	}_{\lceil 2^T \times \: t \rceil \ \text{times}}
+\end{equation}
+
+where $2^T$ is the scaling factor and $t$ is the desired time step. Given a large enough $T$, this method can handle any positive time step with arbitrary accuracy, however very quickly at the cost of computional unfeasibility. Similarly, we could use a two step approach, calculating the deformation $\Phi^{(\epsilon)}$ for some time step $\epsilon$ by squaring and then iteratively applying $\Phi^{(\epsilon)}$. While this is much faster in practice, the choice of $\epsilon$ still represents a trade off between accuracy, data availability and computational viability.
+
+In addition to the final deformation field $\Phi^{(1)}$, the recurrence also yields intermediate deformations $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T} $ at no additional computational cost. For instance, the computation of a deformation field corresponding to a time step of 8 years additionally yields the deformations for ${ 4, 2, 1, 0.5, \ldots }$ years TODO add sentence here "could be used to". While this represents an improvement, the benefits are relatively minor as we are still limited to a very specific set of time steps.
+
+However, from the properties of one-parameter subgroups in \autoref{eq:vox_oneparamsubgroup} we know that any two given deformations $\Phi^{(t)}$ and $\Phi^{(t')}$ can be composed to obtain ${ \Phi^{(t + t')} = \Phi^{(t)} \circ \Phi^{(t')} }$. It follows that for any time step $t \in [0, 1)$, the corresponding deformation $\Phi^{(t)}$ can be represented as a composition of deformations from a subset $\mathcal{S}^{(t)} \subset \{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T} $ of intermediate deformations
+\begin{equation}
+	\Phi^{(t)} = \underset{\Phi^{(i)} \; \in \; \mathcal{S}^{(t)}}{\bigcirc} \Phi^{(i)}
+\end{equation}
+
+In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, with each $t$ uniquely represented by a binary vector in this space.
+
+\input{tikz/timestep}
 
 \chapter{Applications}
 
@@ -174,7 +213,7 @@ Our data processing pipeline can be separated into three distinct steps:
 \item Segmentation
 \end{itemize}
 
-Firstly, in what is known as brain extraction or alternatively skull stripping, we extracts the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit (TODO cite), using the bet and flirt commands respectively. Thirdly, we segment each voxel into three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map, resulting in a new image with a number of potentially benefitial properties: Firstly, all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized MRI data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
+Firstly, in what is known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit (TODO cite), using the bet and flirt commands respectively. Thirdly, we segment each voxel into three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map, resulting in a new image with a number of potentially benefitial properties: Firstly, all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized MRI data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
 Incidentally, since the output of our preprocessing pipeline is a segmentation mask, one could combine the data from T1 scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea as a part of this thesis.
 
 \subsection{Data Splitting}
