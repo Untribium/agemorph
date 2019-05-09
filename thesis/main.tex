@@ -112,14 +112,14 @@ The network is implemented in Keras with a Tensorflow backend and trained end-to
 
 
 \section{Adaptation for Brain Aging}
-While the tasks of brain registration and generative brain aging may not appear to have much in common at first, both can be described in terms of learning a deformation function. As such, an approach suited to the brain registration task can presumably be adapted to suit brain aging as well. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
+While the tasks of brain registration and generative brain aging may not appear to have much in common at first, both can be described in terms of learning a deformation function. As such, the approach used in \cite{voxelmorph} can presumably be adapted to suit brain aging as well. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
 
 Most importantly, the brain registration task as defined in \cite{voxelmorph} and described above is an unsupervised learning problem where both the source image $x$ and the target image $y$ are available in the prediction step. Conversely, since the goal of the brain aging task is to predict the future state of $x$, the aged target image $y$ is only available in training and therefore cannot be a part of the model's input.
 
-Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale, meaning that the reconstruction term of the loss function in \autoref{eq:voxloss} may not represent an effective objective. TODO not good enough, mention noise
+Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale and therefore, the noise introduced as part of the reconstruction term in \autoref{eq:voxloss} may have a negative effect on the model performance.
 
 Finally, while intermediate deformations $\Phi^{(t)}$ for time steps $t \notin \{0, 1\}$ are not of primary interest in the brain registration task, the ability to predict a brain image $\hat y^{(t)} = x \circ \Phi_z^{(t)}$ for arbitrary $t$ promises valuable insights into the progression of neurodegenerative diseases as well as the brain's aging process in general.
-Furthermore, the ability to train on image pairs with a large range of time steps $t$ is also crucial as the number of image pairs for any particular $t$ is very limited. TODO ugly sentence, fix, also mention better generalization with different t
+Furthermore, the ability to train on image pairs with a large range of time steps $t$ is also crucial as the number of image pairs for any particular fixed $t$ is very limited. Moreover, a model trained on a range of time steps should be able to generalize much more  TODO ugly sentence, fix, also mention better generalization with different t
 
 \subsection{Adversarial Loss}
 % maybe say what we do first, then why?
@@ -129,7 +129,9 @@ As described above, the model input is restricted to the source image $x$ and, w
 
 %As described above, the model input is restricted to the source image $x$ due to the supervised nature of the brain aging problem. However, without access to $y$, predicting differences between the source $x$ and target $y$ that are not related to aging, such as artifacts induced during scaning or preprocessing (e.g. skull remnants or misalignment), is virtually impossible. As a consequence, our loss function should be invariant to such changes. Moreover, the reconstruction loss term in \autoref{eq:voxloss} considers $y$ to be a noisy observation of $ x \circ \Phi_z $. While this works well for relatively large deformations, aging-related changes are much smaller in scale
 
-Therefore, we replace the reconstruction loss term in \autoref{eq:voxloss} with an adversarial loss by adding a secondary critic network to architecture.
+Therefore, we remove the reconstruction loss term in \autoref{eq:voxloss} and replace it with an adversarial loss component. We achieve this by adding a secondary critic network to the architecture which is trained alongside the generator in an adversarial fashion. Effectively, this tranforms the model into a Generative Adversarial Network (GAN) \cite{GAN}.
+
+In the adversarial setting, a generative model $G$ and a discriminative model $D$ are engaged in a minimax game, where .
 
 
 
@@ -159,10 +161,10 @@ Finally, we add a loss term to encourage sparseness of the velocity fields
 \end{equation}
 
 
-\subsection{Arbitrary Time Step Scaling and Squaring}
-The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly desirable for the brain aging task.
+\subsection{Arbitrary Time Step Training and Prediction}
+The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly desirable for the brain aging task. Therefore, one of our goals is to enable training and prediction on arbitrary time steps.
 
-One straightforward approach to enabling training and prediction on arbitrary time steps is to abandon the scaling and squaring method in favor of iterative composition
+One straightforward approach is to abandon the scaling and squaring method in favor of iterative composition
 \begin{equation}
 	\Phi^{(t)} =
 	\underbrace{
@@ -203,23 +205,20 @@ get heat map of changes
 \chapter{Data}
 
 \section{Synthetic Data}
-In order to validate our architecture, we first train and evaluate our model on a synthetic data set designed to yield easily interpretable results while still being similar in structure to the preprocessed brain data.
-Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness $d_{x_i}$ in $x$ is identical for all $x_i$ and $d_{y_i} = (1-t) d_x$ for $y_i$
+In order to validate our architecture, we first train and evaluate our model on a synthetic data set designed to yield easily interpretable results while still being similar in structure to the preprocessed brain data. TODO ref to figure with toy data
 
+Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness decreases from $x_i$ to $y_i$, where the thickness in $y_i$ is defined as $d_{y_i} = (1-t) d_x$, with $d_x$ identical for all $x_i$. We explore two different backgrounds, a constant value of 0 as well as smoothed gaussian noise identical for $x_i$ and $y_i$. TODO maybe more complex toy data
 
-spheres, maybe also more complex (multiple spheres, overlapping)
-randomized position, delta
-shows that the model understands deltas
+We generate a total of 20'000 samples, using 60\% of the data set for training and 20\% for evaluation and testing each.
 
 \section{MRI Data}
 For the 
 
 \subsection{Data Sources}
-
-ADNI + AIBL
+We use a large data set of 19'000 TODO(exact numbers) brain MRI scans from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies.
 
 \subsection{Data Processing}
-Our data processing pipeline can be separated into three distinct steps:
+Our data processing pipeline consists of three primary steps:
 
 \begin{itemize}
 \item Extraction
@@ -227,7 +226,7 @@ Our data processing pipeline can be separated into three distinct steps:
 \item Segmentation
 \end{itemize}
 
-In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map, resulting in a new image with a number of potentially benefitial properties: Firstly, all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized MRI data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
+In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
 Note that since the output of our preprocessing pipeline is a segmentation mask, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
 
 \subsection{Data Splitting}
