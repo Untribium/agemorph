@@ -203,7 +203,9 @@ get heat map of changes
 \chapter{Data}
 
 \section{Synthetic Data}
-Due to the difficulty of reliably validating the performance of generative models
+In order to validate our architecture, we first train and evaluate our model on a synthetic data set designed to yield easily interpretable results while still being similar in structure to the preprocessed brain data.
+Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness $d_{x_i}$ in $x$ is identical for all $x_i$ and $d_{y_i} = (1-t) d_x$ for $y_i$
+
 
 spheres, maybe also more complex (multiple spheres, overlapping)
 randomized position, delta
