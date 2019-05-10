@@ -41,9 +41,9 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
                reg_model_file, clf_model_file, batchnorm, leaky):
 
     vol_shape = tuple(vol_shape)
-    
+   
     gen_net = generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky)
-    cri_net = critic_net(vol_shape, cri_base_nf, leaky)
+    cri_net = critic_net(vol_shape, cri_base_nf, leaky, reg_model_file is None)
 
     """
     nomenclature
@@ -58,11 +58,13 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     # --- age regressor (pre-trained) ---
     if reg_model_file:
         reg_net = keras.models.load_model(reg_model_file)
+        reg_net.name = 'reg'
         reg_net.trainable = False
  
     # --- dx classifier (pre-trained) ---
     if clf_model_file:
-        clf_net = keras.models.load_model(reg_model_file)
+        clf_net = keras.models.load_model(clf_model_file)
+        clf_net.name = 'clf'
         clf_net.trainable = False
 
     # --- critic ---
@@ -317,7 +319,7 @@ def generator_net(vol_shape, vel_resize, int_steps, batchnorm, leaky):
     return Model(inputs=inputs, outputs=outputs)
 
 
-def critic_net(vol_shape, base_nf=8, leaky=0.2):
+def critic_net(vol_shape, base_nf=8, leaky=0.2, delta_in=False):
 
     ndims = len(vol_shape)
     assert ndims in [1, 2, 3], "ndims should be one of 1, 2, or 3. found: {}".format(ndims)
@@ -326,6 +328,10 @@ def critic_net(vol_shape, base_nf=8, leaky=0.2):
     y = Input(shape=vol_shape + (1,)) # image 2nd visit (real or fake)
 
     inputs = [x, y]
+
+    if delta_in:
+        d = Input(shape=vol_shape + (1,))
+        inputs.append(d)
 
     print('critic net:')
 

@@ -39,6 +39,9 @@ def train(csv_path,
           prior_lambda,
           batchnorm,
           leaky,
+          split_col,
+          split_train,
+          split_eval,
           reg_model_file,
           clf_model_file,
           cri_base_nf,
@@ -189,11 +192,13 @@ def train(csv_path,
     # datagens for training and validation
     train_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, weights=sample_weights, split='train')
+                            sample=True, weights=sample_weights,
+                            split=(split_col, split_train))
 
     valid_csv_data = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, weights=sample_weights, split='eval')
+                            sample=True, weights=sample_weights,
+                            split=(split_col, split_eval))
 
     use_reg = reg_model_file is not None
     use_clf = clf_model_file is not None
@@ -310,7 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--cri_base_nf", type=int,
                         dest="cri_base_nf", default=8)
     parser.add_argument("--gen_loss_weights", type=float, nargs="+",
-                        dest="gen_loss_weights", default=[1, 100, 500, 10, 0, 0])
+                        dest="gen_loss_weights", default=[1, 200, 5, 100, 0, 0])
     parser.add_argument("--cri_loss_weights", type=float, nargs="+",
                         dest="cri_loss_weights", default=[1, 1, 10])
     parser.add_argument("--int_steps", type=int,
@@ -336,6 +341,12 @@ if __name__ == "__main__":
                         help="number of validation steps")
     parser.add_argument("--leaky", type=float, default=0.2,
                         dest="leaky")
+    parser.add_argument("--split_col", type=str,
+                        dest="split_col", default='split')
+    parser.add_argument("--split_train", type=str, nargs="+",
+                        dest="split_train", default=['train'])
+    parser.add_argument("--split_eval", type=str, nargs="+",
+                        dest="split_eval", default=['eval'])
 
     parser.add_argument("--batchnorm", dest="batchnorm", action="store_true")
     

@@ -27,19 +27,21 @@ def delta_bits(delta, max_delta, int_steps):
 def delta_channel(delta, vol_shape):
 
     # slicer to reshape
-    slicer = (slice(None),)
-    slicer += (None,) * len(vol_shape) - 1
+    slicer = (slice(None),) * 2
+    slicer += (None,) * (len(vol_shape))
 
-    channel = np.ones(vol_shape, dtype=np.float32)
+    channel = np.ones((delta.shape[0], *vol_shape, 1), dtype=np.float32)
     channel *= delta[slicer]
 
     return channel
    
 
 # returns two gens for GAN generator and critic
-def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg, use_clf):
+def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg, use_clf, batch_size=None):
     
-    batch_size = next(csv_gen)['img_path_0'].shape[0]
+    # watch out, drops first batch! 
+    if batch_size is None: 
+        batch_size = next(csv_gen)['img_path_0'].shape[0]
 
     # loss labels
     feat_dummy = np.zeros((batch_size, 400))
@@ -48,7 +50,7 @@ def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg
     ws_fake = np.ones((batch_size, 1))
     ws_avgd = np.ones((batch_size, 1))
     dt_zero = np.zeros((batch_size, 1))
- 
+
     def critic_gen():
 
         while True:
@@ -66,7 +68,7 @@ def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg
             labels = [ws_real, ws_fake, ws_avgd]
            
             yield inputs, labels, batch
- 
+    
     def generator_gen():
 
         while True:
@@ -94,49 +96,6 @@ def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg
             yield inputs, labels, batch
     
     return critic_gen(), generator_gen()
-
-
-def gan_gen(csv_gen, max_delta, int_steps, max_steps=None):
-    '''
-    convert delta into bin representation used in generator ss steps.
-    number of bits is fixed to 16, each bit signifies whether that step
-    is applied to the total displacement
-
-    max_steps:
-    drop batch if it requires more than max_steps squaring steps in the
-    vector field integration (to make sure we don't run out of memory)
-    '''
-    while(True):
-
-        imgs, lbls = next(csv_gen) 
-
-        lbls[0] = lbls[0][:, 0] # squeeze last dim
-        
-        lbls[0] = lbls[0] / (max_delta + 1) # rescale to [0,1)
-        
-        delta_shift = lbls[0] *  2**(int_steps + 1)
-        delta_shift = delta_shift.astype(int)
-
-        delta_bits = [to_bin(d, 16) for d in delta_shift]
-        delta_bits = np.array(delta_bits)
-
-        if max_steps:
-            # total number of squaring steps
-            sum_steps = delta_bits * np.arange(1, 17)[None, :]
-            sum_steps = sum_steps.max(axis=1).sum()
-
-            print(sum_steps)
-            if sum_steps > max_steps:
-                continue
-            
-        # insert bits after delta
-        lbls[1:1] = [delta_bits]
-
-        # channel
-        delta_channel = lbls[0].reshape((-1, 1, 1, 1, 1))
-        lbls[2:2] = [np.ones_like(imgs[0], dtype=np.float32) * delta_channel]
-
-        yield imgs, lbls
 
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
@@ -172,8 +131,20 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
     csv = pd.read_csv(csv_path)
 
     if split is not None:
-        assert 'split' in csv.columns, 'csv has no split column'
-        csv = csv[csv['split'] == split]
+
+        split_col = 'split'
+
+        if isinstance(split, tuple):
+            split_col = split[0]
+            split = split[1]
+
+        if isinstance(split, str):
+            split = [split]
+
+        assert split_col in csv.columns, 'csv has no column "{}"'.format(split_col)
+        
+        csv = csv[csv[split_col].isin(split)]
+
     else:
         split = 'data'
 
