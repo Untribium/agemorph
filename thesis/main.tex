@@ -131,35 +131,44 @@ As described above, the model input is restricted to the source image $x$ and, w
 
 Therefore, we remove the reconstruction loss term in \autoref{eq:voxloss} and replace it with an adversarial loss component. We achieve this by adding a secondary critic network to the architecture which is trained alongside the generator in an adversarial fashion. Effectively, this tranforms the model into a Generative Adversarial Network (GAN) \cite{GAN}.
 
-In the adversarial setting, a generative model $G$ and a discriminative model $D$ are engaged in a minimax game, where .
-
-
-
+In the adversarial setting, a generative model $G$ and a discriminative model $D$ are engaged in a minimax game, in which the generator aims to produce outputs that to the discriminator are indistinguishable from samples drawn from a real data distribution $p_{data}$. More formally, a GAN optimizes the objective
 \begin{equation}
-	\mathcal{L}_{GAN}(M, D) = \E _ { x \sim p_d(x | c = 0) } [ D (x) ] 
-	 - \E _ { x \sim p_d(x | c = 1) } [ D (x + M(x)) ].
+	\min_G \max_D V(G, D) = \E_{ x \sim p_{data}(x) } [ \: D (x) \: ] 
+	 - \E_{ z \sim p_z(z) } [ \: 1 - D (G(z))) \: ]
 \end{equation}
 
+where $D(x)$ is a probability and $z$ is usually sampled from a latent distribution. However, in the brain aging setting the goal is to transform a source image $x$ in a way similar to the actual aging process and therefore we get the revised objective
 \begin{equation}
-	\mathcal{L}_{reg} (M) = \norm{M(x)}_1.
+	\begin{split}
+		\min_G \max_D V(G, D) = \; & \E_{ (x, y, \delta) \sim p_{data} } [ \: D (x, y, \delta) \: ] \\
+		 - & \E_{ (x, \delta) \sim p_{data} } [ \: 1 - D (x, G(x), \delta)) \: ]
+	\end{split}
 \end{equation}
 
-\begin{equation}
-	M^* = \argmin_M \max_{D \in \mathcal{D}} \mathcal{L}_{GAN}(M, D) + \lambda \mathcal{L}_{reg} (M),
-\end{equation}
+where the image pair $(x, y)$ and the corresponding $\delta$ are samples from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
 
-where $\mathcal{D}$ is the set of 1-Lipschitz functions.
+We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky} in which the discriminator $D$ is replaced by a critic $C$ with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani}.
 
-Similar to \cite{VAGAN} we additionally introduce a similarity loss $\mathcal{L}_{sim}$ defined as the $L_1$ difference between the original image $x$ and the warped image $\hat y = x \circ \Phi_z$
+\subsection{Additional Loss Terms}
+In addition to the adversarial loss we also examine four additional loss terms and their effects on the model performance.
+
+% Age Regressor
+
+% Dx Classifier
+
+% Similarity Loss (L1)
+Similar to \cite{VAGAN} and \cite{wegmayr} we introduce a similarity loss defined as the $L_1$ difference between the original image $x$ and the warped image $\hat y = x \circ \Phi_z$
 \begin{equation}
 	\mathcal{L}_{sim}( x, \hat y ) = \norm{ \hat y - x }_1
 \end{equation}
 
-Finally, we add a loss term to encourage sparseness of the velocity fields
+% Deformation Sparseness
+Finally, we encourage sparseness of the velocity field by imposing an $L_1$ loss on its magnitude
 \begin{equation}
 	\mathcal{L}_{sparse}( \mu_z ) = \norm{\mu_z}_1
 \end{equation}
 
+Note that while the primary motivation for sparseness is to improve the interpretability of the deformation, the loss term also acts as a regularizer.
 
 \subsection{Arbitrary Time Step Training and Prediction}
 The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly desirable for the brain aging task. Therefore, one of our goals is to enable training and prediction on arbitrary time steps.
@@ -183,18 +192,39 @@ However, from the properties of one-parameter subgroups in \autoref{eq:voxonepar
 
 In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. An example of one such composition is shown in TODO figure ref.
 
-\input{tikz/timestep}
+TODO pseudo code
+
+\begin{figure}
+	\centering
+	\input{tikz/timestep}
+	\caption{Arbitrary time step scaling and squaring with $T = 3$ squaring and $ 2^T = 8 $ atomic steps, shown for one voxel $ \vec p $. The deformation $ \Phi^{(t)} $ can be approximated at any time step $ t \in [0, 1] $ by composing a subset of intermediate deformations. Note that in practice, larger $T$ are used resulting in an exponentially higher number of atomic steps and therefore a better approximation, e.g. $T = 7$ yielding $ 2^7 = 128 $ atomic steps. We calculate the deformation for all voxels $ \vec{p} $ in parallel.} \label{fig:arbtimestep}
+\end{figure}
 
 \chapter{Applications}
+
+
 
 want to predict brain after given time step
 useful for diagnostics (use existing methods)
 useful for understanding (different brains, same time step)
 
-\section{Long Term Prediction}
+\section{Generative Forward Prediction}
+One interesting aspect
+While the resulting predictions are not likely to be very accurate
+
+can leverage existing diagnostic tools
 not realistic but works to see trends
 
 \section{Conversion Prediction}
+Early prediction of Alzheimer's Disease (AD) onset is an important area of Alzheimer's research, with one particular interest being the Mild Cognitive Impairment (MCI) conversion problem. Given data about a patient diagnosed with MCI at time $t_0$, we want to predict the probabilty of that patient's diagnosis converting to AD at some point in time in the future $ t_1 = t_0 + \Delta $. 
+We distinguish between progressive (pMCI) cases, where the diagnosis converts within $\Delta$, and stable (sMCI) cases where it does not.
+
+More specifically, a case is considered \textit{progressive} if there exists a pair of visits $(v_a, v_b)$ at times $(t_a, t_b)$ with $ t_b - t_a \geq \Delta $ and diagnoses $d_a = \text{MCI} $ and $d_b = \text{AD} $. Moreover, we require that the diagnosis does not revert after $v_b$, that is $ d_i = \text{AD} $ for all visits $v_i$ where $t_i > t_b$.
+
+Conversely, a case is considered \textit{stable} if its diagnosis does not change across the entire data set and its visits span a time frame of at least $\Delta$, that is $ d_i = \text{MCI} $ for all visits $v_i$ and $ { t_{max} - t_{min} \geq \Delta } $.
+
+Using generative forward prediction described in the previous section, we can predict the state of a brain for any time
+In this manner, existing diagnostic tools can be applied to the predicted images without any adaptation.
 Want to know whether patients with Mild Cognitive Impairment convert to AD patients
 
 \section{Feature Attribution}
@@ -212,10 +242,12 @@ Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images
 We generate a total of 20'000 samples, using 60\% of the data set for training and 20\% for evaluation and testing each.
 
 \section{MRI Data}
-For the 
+For the brain aging task, we use T1-weighted MRI brain scans
 
 \subsection{Data Sources}
-We use a large data set of 19'000 TODO(exact numbers) brain MRI scans from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies.
+We use a data set consisting of 19'000 TODO(exact numbers) brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies.
+
+The dimensions of the raw scans depend on the scanner model and therefore vary slightly, with a median of $ 240 \times 256 \times 170 $. 
 
 \subsection{Data Processing}
 Our data processing pipeline consists of three primary steps:
@@ -227,9 +259,25 @@ Our data processing pipeline consists of three primary steps:
 \end{itemize}
 
 In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
+
 Note that since the output of our preprocessing pipeline is a segmentation mask, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
 
+For computational reasons, we also perform downsampling with a factor of two and crop the scans to $ 80 \times 32 \times 80 $, keeping only the center 32 coronal slices. However, note that our architecture uses 3D convolutions throughout and therefore TODO(can train on entire brain if desired)
+
 \subsection{Data Splitting}
+
+As a consequence, we prepare a number of different data splits 
+
+"Clean" Diagnoses
+In order to 
+Single Images
+The most straightforward
+
+Pairs
+
+Leave One Visit Out
+
+
 
 different splits for different tasks
 dx classifier
