@@ -1,0 +1,34 @@
+\begin{algorithm}
+	\DontPrintSemicolon
+	\SetKwFunction{transform}{transform}
+	\SetKwFunction{floor}{floor}
+	\SetKw{KwTo}{in}
+	\SetKwFunction{transform}{transform}
+	\SetKwInOut{Input}{input}
+	\SetKwInOut{Output}{output}
+	\SetAlgoLined
+	\Input{
+		$v$ \tabto{2.3cm} velocity field\\
+		\ $t$ \tabto{2.3cm} time step $ \in [0, 1)$\\
+		\ $T$ \tabto{2.3cm} number of squaring steps
+	}
+	\Output{ $d$, \tabto{2.3cm} deformation field}
+	\;
+	$bits \leftarrow $ \floor($ t \ \ \verb|<<| \ \ T $) \;
+	$d \leftarrow 0$ \;
+	$v \leftarrow v$ / $2^T$ \;
+	\;
+	\For{bit \KwTo bits}{
+
+		\If{bit = 1}{
+			$d \leftarrow d$ + \transform($v, d$) \;
+		}
+
+		$v \leftarrow v$ + \transform($v, v$) \;
+	}
+	
+	\caption{Scaling and Squaring for arbitrary time step}
+	\label{alg:arbtimestep}
+\end{algorithm}
+
+
