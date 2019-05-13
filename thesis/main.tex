@@ -84,13 +84,13 @@ The complete loss function can be separated into three terms denoted as follows
 	\end{split}
 \end{equation}
 
-The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$. The latter can be shown more explicitly by rewriting the precision term as $ { \frac{\lambda}{2} \sum \sum_{j \in N(I)} ( \mu[i] - \mu[j])^{2} } $, where $N(i)$ denotes the set of neighbors of voxel $i$.
+The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$. This effect can be shown more explicitly by rewriting the precision term as $ { \frac{\lambda}{2} \sum \sum_{j \in N(I)} ( \mu[i] - \mu[j])^{2} } $, where $N(i)$ denotes the set of neighbors of voxel $i$. Both $\sigma$ and $\lambda$ are treated as hyperparameters, respectively controlling the reconstruction penalty and the magnitude of the velocity field.
 
 \subsection{Network Architecture}
 TODO(section hierarchy doesn't make much sense, should be sub of Vox)
 The paramaters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers with strides of two and three upsampling layers of 32 filters each. All convolutional layers use leaky ReLU activations and kernels of size $3\times3\times3$. TODO illustration of network (don't use from paper, need to do it for my own archs anyway)
 
-The subsequent layer then samples a new stationary velocity field $z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y})$ using the reparameterization trick \cite{kingma2013}, followed by newly introduced scaling and squaring layers to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
+Given $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $ using the reparameterization trick \cite{kingma2013}, which is then integrated using newly introduced scaling and squaring layers to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
 
 The network is implemented in Keras with a Tensorflow backend and trained end-to-end using the Adam \cite{Adam} optimizer.
 
@@ -137,15 +137,15 @@ In addition to the adversarial loss we also examine four additional loss terms a
 
 \subsubsection*{Age Regressor}
 To encourage our model to generate realistically aged $G(x) = x \circ \Phi^{(t)} $ with respect to time step $t$, we use a pre-trained age regressor $R$ to estimate the apparent age of $G(x)$.
-Let $ a_x $ denote a patient's age at the time of taking image $x$ and $ \hat a_x $ denote the age as estimated by the age regressor on $x$. Furthermore, let $ t_{(x, y)} $ and $ \hat t_{(x, y)} $ denote the real and estimated time differences between images $x$ and $y$, where $ \hat t_{(x, y)} = \hat a_y - \hat a_x $. As a side note, we generally assume $t \in [0, 1]$ normalized by $\max_{(x, y) \in \mathcal{D}_{train}} a_y - a_x $, the maximum time step occuring in the training data. However, for the sake of notational simplicity, we interpret $t$ as an absolute value in years for the remainder of this section.
+Let $ a_x $ denote a patient's age at the time of taking image $x$ and $ \hat a_x $ denote the age as estimated by the age regressor on $x$. As a side note, for the generator we generally assume $t \in [0, 1]$ normalized by $\max_{(x, y) \in \mathcal{D}_{train}} a_y - a_x $, the maximum time step occuring in the training data, and therefore $t_{(x, y)} \neq a_y - a_x$ in general.
 
 We consider two different possible loss terms 
 \begin{equation}
 	\begin{split}
-		(1) \quad \mathcal{L}_{age}(x, y, A) & = 
+		(1) \quad \mathcal{L}_{age}(x, y, R) & = 
 		| (a_y - a_x) - (\hat a_{G(x)} - a_x) | =
 		| a_y - \hat a_{G(x)} | \\[8pt]
-		(2) \quad \mathcal{L}_{age}(x, y, A) & =
+		(2) \quad \mathcal{L}_{age}(x, y, R) & =
 		| (\hat a_y - \hat a_x) - (\hat a_{G(x)} - \hat a_x) | = 
 		| \hat a_y - \hat a_{G(x)} |
 	\end{split}
@@ -159,9 +159,9 @@ Similar to the age regressor, we also add a loss term based on a diagnosis class
 \begin{equation}
 	\begin{split}
 		H(p, q) & = -p \log\, q - (1 - p)\log(1 - q) \\[8pt]
-		(1) \quad \mathcal{L}_{clf}(x, y, C) & = 
+		(1) \quad \mathcal{L}_{dx}(x, y, C) & = 
 		H(d_y, \hat d_{G(x)}) \\[8pt]
-		(2) \quad \mathcal{L}_{clf}(x, y, C) & =
+		(2) \quad \mathcal{L}_{dx}(x, y, C) & =
 		H(\hat d_y, \hat d_{G(x)}) \\[8pt]
 	\end{split}
 \end{equation}
@@ -184,6 +184,20 @@ Finally, we encourage sparseness of the velocity field by imposing an $L_1$ loss
 
 Note that while this loss term acts as a regularizer, the primary motivation for sparseness is to improve the interpretability of the deformation field by discouraging displacements that have very little or no effect at all.
 
+To summarize, we obtain the complete objective for the generator as follows
+
+\begin{equation}
+	\mathcal{L}_G =
+		\mathcal{L}_{ws} +
+		\lambda_{1} \; \mathcal{L}_{kl} +
+		\lambda_{2} \; \mathcal{L}_{age} + 
+		\lambda_{3} \; \mathcal{L}_{dx} + 
+		\lambda_{4} \; \mathcal{L}_{sim} + 
+		\lambda_{5} \; \mathcal{L}_{sparse}
+\end{equation}
+
+where $\mathcal{L}_{ws}$ is the generator's component of the Wasserstein loss function and $\mathcal{L}_{kl}$ consists of the sigma and precision terms from \autoref{eq:voxloss}. Furthermore, we treat $ \{ \lambda_i \}_{i\;\in\;1\;..\;5}$ as hyperparameters.
+
 \subsection{Arbitrary Time Step Training and Prediction}
 The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly undesirable for the brain aging task. Therefore, one of our goals is to enable training and prediction on arbitrary time steps.
 
@@ -204,7 +218,7 @@ However, from the properties of one-parameter subgroups in \autoref{eq:voxonepar
 	\Phi^{(t)} = \underset{\Phi^{(i)} \; \in \; \mathcal{S}^{(t)}}{\bigcirc} \Phi^{(i)}
 \end{equation}
 
-In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. The deformation is computed in an iterative manner during each squaring step as shown in \autoref{alg:arbtimestep}. Furthermore, a visual example of one such composition is shown in \autoref{fig:arbtimestep}.
+In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. The deformation is computed iteratively over all squaring step as laid out in \autoref{alg:arbtimestep}. Refer to \autoref{fig:arbtimestep} for a visual example of one such composition.
 
 \input{algo/timestep}
 
@@ -215,33 +229,29 @@ In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpret
 \end{figure}
 
 \chapter{Applications}
+Our primary goal is to design a generative model $G$ capable of learning and simulating the aging process of the brain. Given an input image $x$, we can then use the trained model $G$ to generate a predicted future state of the brain $\hat y^{(t)} = G(x) = x \circ \Phi^{(t)}$ for any time step $t$.
 
-
-
-want to predict brain after given time step
-useful for diagnostics (use existing methods)
-useful for understanding (different brains, same time step)
-
-\section{Generative Forward Prediction}
-One interesting aspect
-While the resulting predictions are not likely to be very accurate
-
-can leverage existing diagnostic tools
-not realistic but works to see trends
+Being able to generate realistic predictions might be beneficial in the early detection of Alzheimer's onset, in particular since existing diagnostic tools can be directly applied to predicted $\hat y$ without any necessary adaptations. Furthermore, the resulting deformation fields may yield insights into the progression and specific changes of neurodegenerative diseases.
 
 \section{Conversion Prediction} \label{sec:appconvpred}
-Early prediction of Alzheimer's Disease (AD) onset is an important area of Alzheimer's research, with one particular interest being the Mild Cognitive Impairment (MCI) conversion problem. Given data about a patient diagnosed with MCI at time $t_0$, our goal is to predict the probabilty of that patient's diagnosis converting to AD over a given period of time $ \Delta $. 
-We distinguish between progressive cases (pMCI) for which the diagnosis converts within $\Delta$, and stable cases (sMCI) for which it does not.
+Early prediction of Alzheimer's Disease onset is an important area of Alz-heimer's research, with one particular interest being the Mild Cognitive Impairment (MCI) conversion problem. Given data about a patient diagnosed with MCI at some visit $v_i$, our goal is to predict the probabilty of that patient's diagnosis converting to AD over a given period of time $ \Delta $. 
+In this context, we distinguish between progressive cases (pMCI) for which the diagnosis converts within $\Delta$, and stable cases (sMCI) for which it does not.
 
-More specifically, a case is considered \textit{progressive} if there exists a pair of visits $(v_a, v_b)$ at times $(t_a, t_b)$ with $ t_b - t_a \geq \Delta $ and diagnoses $d_a = \text{MCI} $ and $d_b = \text{AD} $. Moreover, we require that the diagnosis does not revert after $v_b$, that is $ d_i = \text{AD} $ for all visits $v_i$ where $t_i > t_b$.
+More specifically, a case is considered \textit{progressive} if there exists a pair of visits $(v_a, v_b)$ at times $(t_a, t_b)$ with $ t_b - t_a \geq \Delta $ and diagnoses $d_a = \text{MCI} $ and $d_b = \text{AD} $. Moreover, we require that the diagnosis does not revert after $v_b$, that is $ d_i = \text{AD} $ for all visits $v_i$ with $t_i > t_b$.
 
-Conversely, a case is considered \textit{stable} if its diagnosis does not change across the entire data set and its visits span a time frame of at least $\Delta$, that is $ d_i = \text{MCI} $ for all visits $v_i$ and $ { t_{max} - t_{min} \geq \Delta } $.
+Conversely, a case is considered \textit{stable} if its diagnosis does not change across the entire data set and its visits span a time frame of at least $\Delta$, that is $ d_i = \text{MCI} $ for all visits $v_i$ and $ { \max_{t} t -  \min_{t} t \geq \Delta } $.
 
-Using generative forward prediction described in the previous section, we can apply existing diagnositc tools to the predicted future state of a brain,
-In this manner, existing diagnostic tools can be applied to the predicted images without any adaptation.
-Want to know whether patients with Mild Cognitive Impairment convert to AD patients
+Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ and use this prediction to estimate the probability of a conversion occuring.
+
+\section{Long-Term Prediction}
+Another interesting application is to generate predictions for very large time steps. While we don't expect the model's predictions to be particulary accurate for time steps $t \gg 1$, i.e. time steps significantly exceeding the maximum time step occuring in training data, long-term predictions can be helpful in highlighting areas of significant change as well as in visualizing how the aging process of a healthy brain differs from that of a brain affected by AD.
 
 \section{Feature Attribution}
+Finally, similar to \cite{VAGAN}, our generator can be used to tackle the task of feature attribution.
+
+By training the model on different subsets of our data such as only AD or HC cases, we can 
+
+Moreover, our model is probabilistic which allows us to produce multiple different predictions for the same input image $x$.
 probabilistic model (sampling from distribution)
 predict multiple images instead of just one
 get heat map of changes
@@ -256,27 +266,27 @@ Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images
 We generate a total of 20'000 samples, using 60\% of the data set for training and 20\% for evaluation and testing each.
 
 \section{MRI Data}
-For the brain aging task, we use T1-weighted MRI brain scans
+To train and validate our brain aging models, we use T1-weighted 3D MRI brain scans. We obtain a large data set of raw images with corresponding subject and image meta data from publically available sources and apply a preprocessing pipeline in order to extract, align and segment the brain tissue. Finally, we generate multiple different data sets tailored to our specific experiments.
 
 \subsection{Data Sources}
-We use a data set consisting of 19'000 TODO(exact numbers) brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies.
+We use a data set consisting of 19'480 brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies. The study data was collected over a time frame of 15 years involving 2794 subjects.
 
-The dimensions of the raw scans depend on the type and model of scanner used and therefore vary slightly, with a median of $ 240 \times 256 \times 170 $. 
+The dimensions of the raw scans depend on the type and model of scanner used and therefore vary slightly, with a median of $ 240 \times 256 \times 170 $. Furthermore, depending on a subject's study group assignment, images are taken at a field strengths of 1.5T or 3T.
 
-\subsection{Data Processing}
+\subsection{Image Data Preprocessing}
 Our data processing pipeline consists of three primary steps:
 
 \begin{itemize}
-\item Extraction
 \item Registration
+\item Extraction
 \item Segmentation
 \end{itemize}
-
+TODO(change order in text, align then extract)
 In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
 
 Note that since the output of our preprocessing pipeline is a segmentation mask, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
 
-For computational reasons, we also perform downsampling with a factor of two and crop the scans to $ 80 \times 32 \times 80 $, keeping only the center 32 coronal slices. However, note that our architecture uses 3D convolutions throughout and therefore TODO(can train on entire brain if desired)
+For computational reasons, we also perform downsampling with a factor of 0.5 followed by cropping to keep only the center 32 coronal slices, resulting in a final shape of $ 80 \times 32 \times 80 $. However, note that our architecture uses 3D convolutions throughout and therefore can be trained on the unscaled data if desired, albeit at a significant computational penalty.
 
 TODO(include images!)
 
@@ -292,12 +302,10 @@ The \textit{Image Set} forms the foundation for all other data sets. It consists
 The \textit{MCI/AD Set} consists of the images of all visits $v^s_i$ for which we have high confidence in the diagnosis $d^s_i \in \{MCI, AD\}$. \\
 We consider a visit $v^s_i$ \textit{firmly MCI} if $d^s_i$ as well as both the diagnoses of the previous and following visit $d^s_{i-1}$ and $d^s_{i+1}$ are $MCI$. Implicitly, this also means that we only consider subjects with at least three visits. Conversely, for a visit $v^s_i$ to be considered \textit{firmly AD}, we require that both $d^s_i$ and $d^s_{i-1}$ are $AD$.
 
-\subsubsection*{Image Pair Set} \label{sec:datpairs}
+\subsubsection*{Image Pairs Set} \label{sec:datpairs}
 
 \subsubsection*{MCI Conversion Set} \label{sec:datconv}
-The \textit{MCI Conversion Set} consists of image pairs $(x^s_i, x^s_j)$ of progressive and stable MCI subjects according to the definitions in \autoref{sec:appconvpred}. Following the notation in \ref{sec:appconvpred}, we choose the time step between $x^s_i$ and $x^s_j$ to be $\Delta = 4$. In general, multiple viable image pair combinations exist for each subject and we prioritize to match $\Delta$ to a 
-multiple pairs possible for most patients, only use one
-specifically, choose best matching delta, then try to center flip
+The \textit{MCI Conversion Set} consists of image pairs $(x^s_i, x^s_j)$ of progressive and stable MCI subjects according to the definitions in \autoref{sec:appconvpred}. Following the notation in \ref{sec:appconvpred}, we choose the time step between $x^s_i$ and $x^s_j$ to be $\Delta = 4$. In general, multiple viable image pair combinations exist for each subject and we prioritize matching $\Delta$ followed by centering the point in time where the diagnosis change occurs within $\Delta$.
 
 \subsubsection*{Leave One Visit Out} \label{sec:datloo}
 Finally, we prepare a data set of based on the image set  using a different split for evaluation.
@@ -310,12 +318,7 @@ results with age reg? somewhat tricky
 
 \section{Voxelmorph}
 
-
-\section{Diagnosis Classifier}
-We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, as described in \autoref{sec:datmciad} we limit our training and validation sets to a subset of images from our complete data set with increased confidence in the labels. Note that we use a binary classifier, that is we do not include or classifiy any subjects from the healthy control group HC, focussing instead on the more subtle distinctions between the MCI and AD diagnoses. We examine a number of different convolutional neural network architectures and report the results for three TODO(arbitrary, good idea?) of them. All model architectures are trained a total of three times to avoid local minima on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set.
-
 \section{Age Regressor} \label{sec:expagereg}
-%Evaluating the performance of a generative model is a notoriously difficult task.
 In this section, we present the results of our age regressor experiments. Given its importance in the validation of our generative model, we evaluate the performance of the age regressor on a number of different tasks.
 
 Validating generative outputs is hard
@@ -326,13 +329,34 @@ explain why this is only partially relevant
 show regressor performance on LOO eval set
 show that delta loss is significantly better than absolute L1 loss
 
+\section{Diagnosis Classifier}
+We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images with increased confidence in the diagnosis labels. Note that we use a binary classifier, that is we do not include or classifiy any subjects from the healthy control group HC, focussing instead on the more subtle distinctions between the MCI and AD diagnoses. We examine a number of different convolutional neural network architectures and report the results for three TODO(arbitrary, good idea?) of them. The models are trained on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set. We train all models a total of three times to avoid local minima.
+
 \section{Fixed Delta Prediction}
 predict brain after a given time step
 check resulting ages from age reg
 plots plots plots
 
-\section{Long Term Prediction}
+\section{Long-Term Prediction}
 AD/HC only, compare
+
+% subjects:
+% AD:
+% ADNI_1066	7	1.5	pMCI, 6 AD
+% ADNI_922	7	1.5	pMCI, 6 AD
+% ADNI_1427	7	1.5	pMCI, 7 AD
+
+% HC:
+% ADNI_382	8	1.5	
+% ADNI_13	9	1.5
+% ADNI_441	8	1.5
+% ADNI_553	9	1.5
+% ADNI_677	8	1.5
+% ADNI_1098	9	1.5
+
+% MCI:
+% ADNI_925	11	1.5	pMCI, mostly MCI
+
 with/without reg?
 
 \section{Conversion Prediction}
