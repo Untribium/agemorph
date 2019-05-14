@@ -132,12 +132,14 @@ where the image pair $(x, y)$ and the corresponding age difference $t$ are sampl
 
 We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky} in which the discriminator $D$ is replaced by a critic with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani}.
 
+TODO(beefier UNet, maybe mention TI flow)
+
 \subsection{Additional Loss Terms}
 In addition to the adversarial loss we also examine four additional loss terms and their effects on the model performance.
 
-\subsubsection*{Age Regressor}
+\subsubsection*{Age Regressor} \label{sec:adaagereg}
 To encourage our model to generate realistically aged $G(x) = x \circ \Phi^{(t)} $ with respect to time step $t$, we use a pre-trained age regressor $R$ to estimate the apparent age of $G(x)$.
-Let $ a_x $ denote a patient's age at the time of taking image $x$ and $ \hat a_x $ denote the age as estimated by the age regressor on $x$. As a side note, for the generator we generally assume $t \in [0, 1]$ normalized by $\max_{(x, y) \in \mathcal{D}_{train}} a_y - a_x $, the maximum time step occuring in the training data, and therefore $t_{(x, y)} \neq a_y - a_x$ in general.
+Let $ a_x $ denote a patient's age at the time of taking image $x$ and $ \hat a_x = A(x)$ denote the age as estimated by the age regressor on $x$. As a side note, for the generator we generally assume $t \in [0, 1]$ normalized by $\max_{(x, y) \in \mathcal{D}_{train}} a_y - a_x $, the maximum time step occuring in the training data, and therefore $t_{(x, y)} \neq a_y - a_x$ in general.
 
 We consider two different possible loss terms 
 \begin{equation}
@@ -175,6 +177,8 @@ Similar to \cite{VAGAN} and \cite{wegmayr}, we introduce an additional loss term
 \begin{equation}
 	\mathcal{L}_{sim}( x, G ) = \norm{ G(x) - x }_1
 \end{equation}
+
+TODO(plot of L1 for deltas)
 
 \subsubsection*{Sparseness Loss}
 Finally, we encourage sparseness of the velocity field by imposing an $L_1$ loss on its magnitude TODO(word repetition)
@@ -219,6 +223,10 @@ However, from the properties of one-parameter subgroups in \autoref{eq:voxonepar
 \end{equation}
 
 In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. The deformation is computed iteratively over all squaring step as laid out in \autoref{alg:arbtimestep}. Refer to \autoref{fig:arbtimestep} for a visual example of one such composition.
+
+TODO(only need to go to highest 1 bit, implementation uses 16 bit)
+
+TODO(talk about how precision is calculated, T and max delta)
 
 \input{algo/timestep}
 
@@ -281,64 +289,85 @@ Our data processing pipeline consists of three primary steps:
 \item Extraction
 \item Segmentation
 \end{itemize}
-TODO(change order in text, align then extract)
-In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise.
 
-Note that since the output of our preprocessing pipeline is a segmentation mask, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
+TODO(change order in text, align then extract)
+
+In the first step known as brain extraction or alternatively skull stripping, we extract the brain from the surrounding non-brain tissue and then secondly align the resulting images to a common reference atlas using linear transformations with 12 degrees of freedom. Both steps are performed using the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise. \autoref{fig:preproc} shows the entire preprocessing pipeline and all its intermediate steps applied to one sample from our data set.
+
+\begin{figure}
+	\noindent\makebox[1.1\textwidth]{
+		\centering
+		\input{tikz/preproc}
+	}
+	\caption{Preprocessing pipeline visualized for one sample} \label{fig:preproc}
+\end{figure}
+
+Note that since the primary output of our preprocessing pipeline is based entirely on segmentation masks, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
 
 For computational reasons, we also perform downsampling with a factor of 0.5 followed by cropping to keep only the center 32 coronal slices, resulting in a final shape of $ 80 \times 32 \times 80 $. However, note that our architecture uses 3D convolutions throughout and therefore can be trained on the unscaled data if desired, albeit at a significant computational penalty.
-
-TODO(include images!)
 
 \subsection{Data Splitting} \label{sec:dat}
 In order to run our experiments, we generate a number of data sets for the different settings. For the sake of notational brevity and consiceness, let $s$ denote one subject in our data set and let $v^s_i$ denote the $i$-th visit of subject s, with $V(s)$ denoting the temporally ordered set of visits $v^s_i \in V(s)$ of subject $s$, for $i \in 1 \ ..\ |V(s)|$. For redundancy, MRI scans are usually performed twice resulting in two separate but very similar images. Moreover, for some subjects images taken at different magnetic field strength levels are available. As a consequence, a visit $v^s_i$ typically consists of multiple images $x^s_{i, k} \in I(v^s_i)$ along with the corresponding image meta data. Finally, the examdate $t^s_i$ and the subject age $a^s_i$ at time $t^s_i$ as well as the diagnosis $d^s_i$ are available for most visits.
 
 We split our data sets on a subject basis into training and validation sets containing roughly 80\% and 20\% of the data. This split is performed globally in the sense that given data sets $\mathcal{S}_a$ and $\mathcal{S}_b$, we have $\mathcal{S}_a^{train} \cap \mathcal{S}_b^{valid} = \varnothing$ and vice versa. In other words, a subject may only appear in either the training or validation split across all data sets.
 
-\subsubsection*{Image Set} \label{sec:datsingles}
-The \textit{Image Set} forms the foundation for all other data sets. It consists of all images $x^s_{i, j}$ and the meta data for the corresponding visits $v^s_i$ for which $t^s_i$ and $a^s_i$ are obtainable. We mainly use this set in the training of our age regressor models.
+\subsubsection*{Base Image Set} \label{sec:datsingles}
+The \textit{Base Image Set} forms the foundation for all other data sets. It consists of all images $x^s_{i, j}$ and the meta data for the corresponding visits $v^s_i$ for which $t^s_i$ and $a^s_i$ are obtainable. We mainly use this set in the training of our age regressor models.
 
 \subsubsection*{MCI/AD Set} \label{sec:datmciad}
-The \textit{MCI/AD Set} consists of the images of all visits $v^s_i$ for which we have high confidence in the diagnosis $d^s_i \in \{MCI, AD\}$. \\
+The \textit{MCI/AD Set} consists of the images of all visits $v^s_i$ for which the diagnosis $d^s_i \in \{MCI, AD\}$ and we have high confidence in the label.
+
 We consider a visit $v^s_i$ \textit{firmly MCI} if $d^s_i$ as well as both the diagnoses of the previous and following visit $d^s_{i-1}$ and $d^s_{i+1}$ are $MCI$. Implicitly, this also means that we only consider subjects with at least three visits. Conversely, for a visit $v^s_i$ to be considered \textit{firmly AD}, we require that both $d^s_i$ and $d^s_{i-1}$ are $AD$.
 
 \subsubsection*{Image Pairs Set} \label{sec:datpairs}
+
 
 \subsubsection*{MCI Conversion Set} \label{sec:datconv}
 The \textit{MCI Conversion Set} consists of image pairs $(x^s_i, x^s_j)$ of progressive and stable MCI subjects according to the definitions in \autoref{sec:appconvpred}. Following the notation in \ref{sec:appconvpred}, we choose the time step between $x^s_i$ and $x^s_j$ to be $\Delta = 4$. In general, multiple viable image pair combinations exist for each subject and we prioritize matching $\Delta$ followed by centering the point in time where the diagnosis change occurs within $\Delta$.
 
 \subsubsection*{Leave One Visit Out} \label{sec:datloo}
-Finally, we prepare a data set of based on the image set  using a different split for evaluation.
+Finally, we prepare a data set of based on the image set using a different split for evaluation. 
 
 \chapter{Experiments}
 
 \section{Synthetic Data}
 results without age reg
-results with age reg? somewhat tricky
-
-\section{Voxelmorph}
 
 \section{Age Regressor} \label{sec:expagereg}
-In this section, we present the results of our age regressor experiments. Given its importance in the validation of our generative model, we evaluate the performance of the age regressor on a number of different tasks.
+Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also pre-train an age regressor which given an image $x$ produces an estimated age label $\hat a_x$ and use it to estimate the age label of outputs generated by our model. Furthermore, the regressor is also included in the generator loss function as described in \autoref{sec:adaagereg}.
 
-Validating generative outputs is hard
-we use an age regressor to predict the age of a given scan
-use regressor on generated image
-show regressor accuracy with normal eval set
-explain why this is only partially relevant
-show regressor performance on LOO eval set
-show that delta loss is significantly better than absolute L1 loss
+In this section, we present the results of our age regressor experiments. Given its importance in the validation of our generative model, we evaluate the its performance on a number of different tasks.
+
+TODO(number of steps etc.)
+TODO(multiple models? in appendix? multiple runs?)
+TODO(weighted, non-weighted?)
+
+\subsection*{Absolute Error}
+
+\subsection*{Squared Error}
+
+\subsection*{Delta Loss}
+
 
 \section{Diagnosis Classifier}
 We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images with increased confidence in the diagnosis labels. Note that we use a binary classifier, that is we do not include or classifiy any subjects from the healthy control group HC, focussing instead on the more subtle distinctions between the MCI and AD diagnoses. We examine a number of different convolutional neural network architectures and report the results for three TODO(arbitrary, good idea?) of them. The models are trained on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set. We train all models a total of three times to avoid local minima.
 
-\section{Fixed Delta Prediction}
-predict brain after a given time step
+\section{Generator Models}
+
+\subsection{Voxelmorph}
+
+\subsection{Prediction}
+TODO(predict brain at real delta)
+
+\subsection{Fixed Time Step Prediction}
+TODO(predict brain at fixed time step)
 check resulting ages from age reg
 plots plots plots
+mention TI flow in passing, results were bad
 
-\section{Long-Term Prediction}
+\subsection{Long-Term Prediction}
 AD/HC only, compare
+also regular model? What to show? Age reg doesn't make much sense.
 
 % subjects:
 % AD:
