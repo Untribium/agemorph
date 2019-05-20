@@ -127,7 +127,7 @@ where $D(x)$ is a probability and $z$ is usually sampled from a latent distribut
 	\end{split}
 \end{equation}
 
-where the image pair $(x, y)$ and the corresponding age difference $t$ are samples from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
+where the image pair $(x, y)$ and the corresponding age difference $t$ are samples from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Furthermore, to enable the discriminator to discern pairs with differing time steps, we additionally pass $t$ as an input. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
 
 We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky} in which the discriminator $D$ is replaced by a critic with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani}.
 
@@ -276,7 +276,7 @@ Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ a
 Another interesting application is to generate predictions for very large time steps. While we don't expect the model's predictions to be particulary accurate for time steps $t \gg 1$, i.e. time steps significantly exceeding the maximum time step occuring in training data, long-term predictions can be helpful in highlighting areas of significant change as well as in visualizing how the aging process of a healthy brain differs from that of a brain affected by AD.
 
 \section{Feature Attribution}
-Finally, similar to \cite{VAGAN}, our generator can be used to tackle the task of feature attribution.
+Finally, similar to \cite{VAGAN}, our generator can be used to tackle the task of feature attribution, that is, highlighting 
 
 By training the model on different subsets of our data such as only AD or HC cases, we can 
 
@@ -328,12 +328,43 @@ For computational reasons, we also perform downsampling with a factor of 0.5 fol
 \subsection{Data Splitting} \label{sec:dat}
 In order to run our experiments, we generate a number of data sets for the different settings. For the sake of notational brevity and conciseness, let $s$ denote one subject in our data set and let $v^s_i$ denote the $i$-th visit of subject s, with $V(s)$ denoting the temporally ordered set of visits $v^s_i \in V(s)$ of subject $s$, for $i \in 1 \ ..\ |V(s)|$. To improve readability, we generally omit $s$ unless required. For redundancy, MRI scans are usually performed twice resulting in two separate but very similar images for the same visit. Moreover, images taken at different magnetic field strength levels are available for some subjects. As a consequence, a visit $v_i$ typically consists of multiple images $x_{i, k} \in I(v_i)$ along with the corresponding image meta data. Finally, the examdate $t_i$ and the subject age $a_i$ at time $t_i$ as well as the diagnosis $d_i$ are available for most visits.
 
-Our data sets are split into five equal splits $ \{ \mathcal{S}_i \}_{i\ \in\ 0\;..\;4} $  of 20\% each which are used in various different configurations detailed in the corresponding experiment's section. We perform this split on a subject basis and do so globally, in the sense that if a subject appears in a specific data set, it is always assigned to the same split. In other words, for any pair of splits $ \mathcal{S}_i^A $ and $ \mathcal{S}_j^B $ taken from data sets $A$ and $B$ with $ i \neq j $, the intersection $ { \mathcal{S}_i^A \cap \mathcal{S}_j^B = \varnothing } $ is guaranteed to be the empty set.
+Our data sets are divided into five equal splits $ \{ \mathcal{S}_i \}_{i\ \in\ 0\;..\;4} $ of 20\% each which are used in various different configurations detailed in the corresponding experiment's section. We perform this split on a subject basis and do so globally, in the sense that if a subject appears in a specific data set, it is always assigned to the same split. In other words, for any pair of splits $ \mathcal{S}_i^A $ and $ \mathcal{S}_j^B $ taken from data sets $A$ and $B$ with $ i \neq j $, the intersection $ { \mathcal{S}_i^A \cap \mathcal{S}_j^B = \varnothing } $ is guaranteed to be empty.
 
 \subsubsection*{Base Image Set} \label{sec:datsingles}
 The \textit{Base Image Set} forms the foundation for all other data sets. It consists of all images $x_{i, k}$ and the meta data for the corresponding visits $v_i$ for which $t_i$ and $a_i$ are obtainable. We mainly use this set in the training of our age regressor models.
 
-%TODO(n_images, n_subjects, median/mean age, median/mean n_visits)
+\begin{table}[h]
+	\begin{center}
+		\begin{tabular}{c c c c c c c c c c c}
+			\toprule
+			\multirow{2}{*}{\bfseries Split} & 
+			\multirow{2}{*}{\bfseries N} & 
+			\multirow{2}{*}{\bfseries S} & 
+			\multicolumn{2}{c}{\bfseries HC} & 
+			\multicolumn{2}{c}{\bfseries MCI} & 
+			\multicolumn{2}{c}{\bfseries AD} &
+			\multicolumn{2}{c}{\bfseries Age} \\
+			\cmidrule(lr){4-5}
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
+			\cmidrule(lr){10-11} 
+			& & & N & S & N & S & N & S & mean & std \\ 
+			%------
+			\cmidrule(lr){1-11}
+			$\mathcal{S}_0$ &  2944 &  503 & 1286 &  274 &  961 &  172 &  697 & 137 & 75.1 & 7.4 \\
+			$\mathcal{S}_1$ &  2905 &  504 & 1198 &  266 & 1018 &  181 &  689 & 139 & 75.6 & 7.2 \\
+			$\mathcal{S}_2$ &  3202 &  506 & 1435 &  269 & 1036 &  178 &  731 & 132 & 76.3 & 7.4 \\
+			$\mathcal{S}_3$ &  3294 &  504 & 1563 &  256 & 1025 &  192 &  706 & 136 & 75.6 & 7.4 \\
+			$\mathcal{S}_4$ &  2947 &  506 & 1242 &  264 &  992 &  189 &  713 & 147 & 75.1 & 7.6 \\
+			test            &  4188 &  271 &  174 &   14 & 3184 &  271 &  830 &  98 & 75.2 & 7.1 \\
+			\cmidrule(lr){1-11}
+			All             & 19480 & 2794 & 6898 & 1343 & 8216 & 1183 & 4366 & 789 & 75.5 & 7.4 \\
+			\bottomrule
+		\end{tabular}
+		\caption{Overview of the base image set. $N$ refers to the number of separate images and $S$ to the number of distinct subjects. Note that for any split, the sum of subjects over all diagnoses generally exceeds the total number of subjects, since one subject may have images with different diagnoses.}
+		\label{tab:baseset}
+	\end{center}
+\end{table}
 
 \subsubsection*{MCI/AD Set} \label{sec:datmciad}
 The \textit{MCI/AD Set} consists of the images of all visits $v^s_i$ for which the diagnosis $d^s_i \in \{MCI, AD\}$ and we have high confidence in the label, defined as follows:
@@ -342,7 +373,7 @@ We consider a visit $v^s_i$ \textit{firmly MCI} if $d^s_i$ as well as both the d
 
 Conversely, for a visit $v^s_i$ to be considered \textit{firmly AD}, we require that both $d^s_i$ and $d^s_{i-1}$, the current and previous diagnoses, are $AD$.
 
-%TODO(tikz? kinda unnecessary but why not)
+Note that following these definitions, it is possible for one subject to have visits in both the MCI \textit{and} AD group, see \autoref{fig:mciad} for an illustrated example. An overview of the data set is shown in \autoref{tab:mciadset}.
 
 \begin{figure}[h]
 	\centering
@@ -351,13 +382,83 @@ Conversely, for a visit $v^s_i$ to be considered \textit{firmly AD}, we require 
 	\label{fig:mciad}
 \end{figure}
 
+\vspace{20pt}
+
+\begin{table}[h]
+	\begin{center}
+		\begin{tabular}{c c c c c c c c c c c}
+			\toprule
+			\multirow{2}{*}{\bfseries Split} & 
+			\multirow{2}{*}{\bfseries N} & 
+			\multirow{2}{*}{\bfseries S} & 
+			\multicolumn{2}{c}{\bfseries MCI} & 
+			\multicolumn{2}{c}{\bfseries AD} & 
+			\multicolumn{2}{c}{\bfseries MCI $\cap$ AD} &
+			\multicolumn{2}{c}{\bfseries Age} \\
+			\cmidrule(lr){4-5}
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
+			\cmidrule(lr){10-11} 
+			& & & N & S & N & S & N & S & mean & std \\ 
+			%------
+			\cmidrule(lr){1-11}
+			$\mathcal{S}_0$ &  787 & 148 &  391 &  82 &  396 &  71 &  40 &  5 & 74.4 & 7.6 \\
+			$\mathcal{S}_1$ &  814 & 148 &  408 &  85 &  406 &  71 &  71 &  8 & 76.4 & 7.9 \\
+			$\mathcal{S}_2$ &  909 & 150 &  451 &  82 &  458 &  72 &  45 &  4 & 77.0 & 7.9 \\
+			$\mathcal{S}_3$ &  845 & 148 &  426 &  83 &  419 &  71 &  75 &  6 & 76.0 & 7.9 \\
+			$\mathcal{S}_4$ &  767 & 150 &  372 &  89 &  395 &  72 &  90 & 11 & 74.9 & 8.0 \\
+			\cmidrule(lr){1-11}
+			All             & 4122 & 744 & 2048 & 421 & 2047 & 357 & 321 & 34 & 75.8 & 7.9 \\
+			\bottomrule
+		\end{tabular}
+		\caption{Overview of the MCI/AD data set. $N$ refers to the number of separate images and $S$ to the number of distinct subjects. For MCI $\cap$ AD, $N$ refers to the number of images from subjects for which we have images in both groups.}
+		\label{tab:mciadset}
+	\end{center}
+\end{table}
+
 \subsubsection*{Image Pairs Set} \label{sec:datpairs}
-The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject $s$ at two different visits $v_i$ and $v_j$. Of particular importance is the time step $t_j - t_i$ between $v_i$ and $v_j$. We limit the maximum time step to 6 years for computational reasons explained in \autoref{sec:adaarbtimestep}.
+The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject $s$ at two different visits $v_i$ and $v_j$. Of particular importance is the time step $t_j - t_i$ between $v_i$ and $v_j$. We limit the maximum time step to 6 years for computational reasons explained in \autoref{sec:adaarbtimestep}. As visualized in \autoref{fig:timestephist}, the data set is biased towards smaller $t$ with median of $1.53$, mean of $2.00$ and a standard deviation of $1.47$. To mitigate this, we calculate sample weights $w = {(| t - \bar t | + 1)}^{\sfrac{1}{2}}$, where $\bar t$ is the mean over all $t$. The resulting distribution is shown in \autoref{fig:timestephist}.
+
+\begin{table}
+	\begin{center}
+		\begin{tabular}{l c c | c c c c c c}
+			\toprule
+			& 
+			\multicolumn{2}{c}{All} &
+			\multicolumn{2}{c}{\bfseries HC} & 
+			\multicolumn{2}{c}{\bfseries MCI} & 
+			\multicolumn{2}{c}{\bfseries AD} \\
+			\cmidrule(lr){2-3}
+			\cmidrule(lr){4-5}
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
+			& N & \multicolumn{1}{c}{S} & N & S & N & S & N & S \\ 
+			\cmidrule(lr){1-9}
+			%------
+			\bfseries HC  &  7339 &  674 & 6739 & 649 &  495 & 110 &  105 &  27 \\
+			\bfseries MCI &  5399 &  918 &  469 &  83 & 3698 & 737 & 1232 & 331 \\
+			\bfseries AD  &  2019 &  421 &    1 &   1 &   43 &  18 & 1975 & 416 \\
+			\cmidrule(lr){1-9}
+			All           & 14757 & 1789 & 7209 & 673 & 4236 & 794 & 3312 & 646 \\
+			\bottomrule
+		\end{tabular}
+		\caption{Overview of the image pairs set, showing the number of pairs for all combinations of diagnoses. Rows correspond to the first image, columns to the second. $N$ refers to the number of separate images and $S$ to the number of distinct subjects.}
+		\label{tab:pairsset}
+	\end{center}
+\end{table}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.9\linewidth]{images/timestep_plots/hist} 
+	\caption{The historgram for time step $t$ across all pairs in the data set. To mitigate the bias towards smaller $t$, we calculate sample weights to be used during training.}
+	\label{fig:timestephist}
+\end{figure}
+
 
 \subsubsection*{MCI Conversion Set} \label{sec:datconv}
 The \textit{MCI Conversion Set} consists of image pairs $(x_i, x_j)$ of progressive and stable MCI subjects according to the definitions in \autoref{sec:appconvpred}. Adding to these constraints, for a subject to be considered pMCI we further require a minimum of two visits diagnosed as MCI and AD each. Furthermore, the subject's diagnosis may not revert from AD to MCI at any point in time.
 
-Following the notation in \ref{sec:appconvpred}, we choose the time step between $x^s_i$ and $x^s_j$ to be $\Delta = 4$ based on data availability and previous work in \cite{wegmayr}. In general, multiple viable image pair combinations exist for each subject and we prioritize matching $\Delta$ followed by centering the point in time where the diagnosis change occurs within $\Delta$. \autoref{fig:pmci} shows one such pair of images for a pMCI subject.
+Following the notation in \ref{sec:appconvpred}, we choose the time step between $v_i$ and $v_j$ to be $\Delta = 4$ based on the available data as well as previous work in \cite{wegmayr}. In general, multiple viable image pair combinations exist for each subject. We prioritize matching $\Delta$ followed by centering the point in time where the diagnosis change occurs within $\Delta$. \autoref{fig:pmci} shows one such pair of visits for a pMCI subject. In total, the conversion set contains 271 pairs of images from 271 subjects, of which 98 are pMCI and 173 are sMCI.
 
 \begin{figure}[h]
 	\centering
@@ -366,31 +467,87 @@ Following the notation in \ref{sec:appconvpred}, we choose the time step between
 	\label{fig:pmci}
 \end{figure}
 
-Note that due to its use in the model validation, this set represents a separate independent split, that is, subjects in the MCI Conversion Set do not occur in any other split.
+Note that due to its use in the model validation, this data set represents a separate independent split, that is, subjects which are part of the MCI Conversion Set do not occur in any other split.
 
 \subsubsection*{Leave One Visit Out} \label{sec:datloo}
-Finally, as the name implies, the \textit{Leave One Visit Out Set} is formed by assigning one visit $v^s_i \in V(s)$ at random to the evaluation set for all subjects $s$ with $ | V(s) | \ge 3 $. The training set consists of all remaining visits. Note that as a consequence, this set does not follow the global 5-fold split.
+Finally, as the name implies, the \textit{Leave One Visit Out Set} is formed by assigning one visit $v^s_i \in V(s)$ at random to the validation set for all subjects $s$ with $ | V(s) | \ge 3 $. All remaining visits are placed in the training set. Note that due to these criteria, this data set does not follow the global 5-fold split. See \autoref{tab:looset} for an overview of the data set.
+
+\begin{table}[h]
+	\begin{center}
+		\begin{tabular}{c c c c c c c c c c c}
+			\toprule
+			\multirow{2}{*}{\bfseries Split} & 
+			\multirow{2}{*}{\bfseries N} & 
+			\multirow{2}{*}{\bfseries S} & 
+			\multicolumn{2}{c}{\bfseries HC} & 
+			\multicolumn{2}{c}{\bfseries MCI} & 
+			\multicolumn{2}{c}{\bfseries AD} &
+			\multicolumn{2}{c}{\bfseries Age} \\
+			\cmidrule(lr){4-5}
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
+			\cmidrule(lr){10-11} 
+			& & & N & S & N & S & N & S & mean & std \\ 
+			%------
+			\cmidrule(lr){1-11}
+			$\mathcal{S}_{train}$ & 16240 & 2794 & 5867 & 1338 & 6834 & 1164 & 3539 & 767 & 75.5 & 7.4 \\
+			$\mathcal{S}_{valid}$ &  1599 & 1599 &  544 &  544 &  666 &  666 &  389 & 389 & 75.3 & 7.3 \\
+			\cmidrule(lr){1-11}
+			All                   & 17839 & 2794 & 6411 & 1343 & 7500 & 1183 & 3928 & 789 & 75.5 & 7.4 \\
+			\bottomrule
+		\end{tabular}
+		\caption{Overview of the Leave One Visit Out data set. $N$ refers to the number of separate images and $S$ to the number of distinct subjects.}
+		\label{tab:looset}
+	\end{center}
+\end{table}
 
 \chapter{Experiments}
 
 \section{Age Regressor} \label{sec:expagereg}
-Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also pre-train an age regressor which given an image $x$ produces an estimated age label $\hat a_x$ and use it to estimate the age label of outputs generated by our model. Furthermore, we also include an regressor in the generator loss function as described in \autoref{sec:adaagereg}.
+Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also pre-train an age regressor, which given an image $x$ produces an estimated age label $\hat a_x$, and use it to estimate the age label, and by extension the time step, of outputs generated by our model. Furthermore, we also include the regressor in the generator loss function as described in \autoref{sec:adaagereg}.
+
+We implement the regressor as a 3D CNN with 9 layers, trained using the Adam optimizer with $\alpha = 0.001, \beta_1 = 0.9, \beta_2 = 0.999 $ and $ \epsilon = 0.0001 $. The first eight layers apply batch normalization and we use a batch size of 32.
 
 In this section, we present the results of our age regressor experiments. Given its importance in the validation of our generative model, we evaluate the its performance on a number of different tasks.
 
 TODO(number of steps etc.)
-TODO(multiple models? in appendix? multiple runs?)
+TODO(multiple models? no. multiple runs?)
 TODO(weighted, non-weighted?)
 
 \subsection*{Absolute Error}
-We train 
+First, we train the regressor using absolute mean error as the objective function for 30'000 batches of 32 samples each. Using our 5-fold data split, we perform cross validation and present the results in \autoref{tab:resagecrossval}. \autoref{fig:regxrxrhat} shows the estimated age against the ground truth labels.
+%TODO(crossval)
 
-plot of pairs age
+\begin{figure}
+	\centering
+	\includegraphics[width=.9\linewidth]{images/age_plots/xr_xrhat} 
+	\vspace*{-15pt}
+	\caption{Age regressor estimates on 2937 validation samples from our base image data set. Note how the predicitions tend to the mean, with a slope of 0.58 compared to the target of 1. The subject's diagnosis appears to have only a small impact on the performance.}
+	\label{fig:regxrxrhat}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=.9\linewidth]{images/age_plots/xr_yr_dx} 
+	\vspace*{-15pt}
+	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, with each axis representing one of the two images. While the absolute age error for a single image is quite significant with a mean of 3.39, the estimate of the relative age difference between two images from the same subject is considerably more accurate with a mean error of 1.21.}
+	\label{fig:regxryr}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=.7\linewidth]{images/age_plots/d_dhat_real}
+	\vspace*{-15pt}
+	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.03 and a slope of 0.67. Note that the stripe patterns forming along the $x$-axis are a consequence of the study scheduling which mandates follow-up visits in intervals of six or twelve months.}
+	\label{fig:regddhatreal}
+\end{figure}
 
 \subsection*{Squared Error}
+We also examine the performance using the same architecture optimizing the squared error with very similar results.
 experiment with squared loss, compare values, basically the same
 
 \subsection*{Leave One Visit Out}
+Given that the age regressor is exclusively utilized to estimate relative age differences in our generative model, we perform an additional experiment more directly focussed at that metric. To that end, we train the same model architecture for 100'000 batches of 32 images each from the Leave One Visit Out data set outlined in \autoref{sec:datloo}. We obtain a mean absolute validation error of 1.01 TODO(exact value) years which is significantly lower as expected. However, separating 
 
 \section{Diagnosis Classifier}
 We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images for which we have increased confidence in the diagnosis labels. Note that we use a binary classifier which does not include any subjects from the healthy control group HC, focussing instead on the more subtle distinctions between thebrains affected by MCI and AD. We examine a number of different convolutional neural network architectures and report the results for three TODO(arbitrary, good idea?) of them. The models are trained on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set. We train all models a total of three times to avoid suboptimal local minima.
@@ -398,7 +555,7 @@ We pre-train a diagnosis classifier to discriminate between images labeled as MC
 \section{Generator Models}
 
 \subsection{Voxelmorph}
-As a baseline, we first present the results of 
+To establish a baseline, we first present the results of 
 
 Note that we do not perform any hyperparameter tuning which could result in a significant improvement in performance.
 
@@ -411,29 +568,77 @@ To validate our adapted architecture, we first train the model on the synthetic 
 \subsection{Prediction}
 %TODO(predict brain at real time step)
 
+\begin{figure}
+	\centering
+	\includegraphics[width=.7\linewidth]{images/age_plots/d_dhat_fake}
+	\vspace*{-15pt}
+	\caption{Age regressor estimates on 2651 validation samples $(x, \hat y)$ with $ \hat y = G(x) $ from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.03 and a slope of 0.67. Note that the stripe patterns forming along the $x$-axis are a consequence of the study scheduling which mandates follow-up visits in intervals of six or twelve months.}
+	\label{fig:regddhatfake}
+\end{figure}
+
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_141445}
+	\vspace*{-15pt}
+	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a subject diagnosed with Alzheimer's Disease. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the corresponding difference maps. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\label{fig:hcad_ad}
+\end{figure}
+
+\begin{figure}
+	\centering
+	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_137014}
+	\vspace*{-15pt}
+	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a healthy subject. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the corresponding difference maps. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\label{fig:hcad_hc}
+\end{figure}
+
+
 \subsection{Fixed Time Step Prediction}
 %TODO(predict brain at fixed time step)
 check resulting ages from age reg
 plots plots plots
 mention TI flow in passing, results were bad
 
+\begin{figure}
+	\centering
+	\includegraphics[width=\linewidth]{images/age_plots/hist_fixed}
+	\vspace*{-15pt}
+	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.03 and a slope of 0.67. Note that the stripe patterns forming along the $x$-axis are a consequence of the study scheduling which mandates follow-up visits in intervals of six or twelve months.}
+	\label{fig:reghistfixed}
+\end{figure}
+
+
 \subsection{Long-Term Prediction}
 AD/HC only, compare
 also regular model? What to show? Age reg doesn't make much sense.
 
-% subjects:
+% pat_id:	n_imgs	field		remark	base_img
+
 % AD:
-% ADNI_1066	7	1.5	pMCI, 6 AD
-% ADNI_922	7	1.5	pMCI, 6 AD
-% ADNI_1427	7	1.5	pMCI, 7 AD
+% ADNI_1066	7	1.5	pMCI	bad	ADNI_85356
+% ADNI_922	7	1.5	pMCI		ADNI_77852
+% ADNI_1427	7	1.5	pMCI 		ADNI_153734
+% ADNI_42	8	1.5	pMCI	ugly
+% ADNI_214	7	1.5	pMCI		ADNI_137475	maybe
+% ADNI_906	6	1.5	pMCI	nice	ADNI_120065	yes, for now
+% ADNI_887	6	1.5	pMCI		ADNI_120099	really nice, but need better model
+% ADNI_658	6	1.5	pMCI		ADNI_62841	nope
+% ADNI_752	6	1.5	pMCI		ADNI_66508	almost no changes
+% ADNI_331	6	1.5	pMCI		ADNI_141445	yes!! but better model
+% ADNI_1243	6	1.5	pMCI	nice	ADNI_214258	small changes, okay
 
 % HC:
-% ADNI_382	8	1.5	
-% ADNI_13	9	1.5
-% ADNI_441	8	1.5
-% ADNI_553	9	1.5
-% ADNI_677	8	1.5
-% ADNI_1098	9	1.5
+% ADNI_382	8	1.5			ADNI_107542	okay...
+% ADNI_441	8	1.5			ADNI_104027	nope
+% ADNI_553	9	1.5			ADNI_155040	real kinda okay, AD model bad
+% ADNI_677	8	1.5			ADNI_116851	no, messed up real
+% ADNI_303	6	1.5		ugly	
+% ADNI_337	10	1.5			ADNI_142666	no, artifacts
+% ADNI_298	9	1.5			ADNI_141972	real okay, small ventricles, maybe slice 20, but guess not
+% ADNI_734	8	1.5			ADNI_116000	yes, for now, not great though
+% ADNI_120	10	1.5			ADNI_137014	good, slice 15
+% ADNI_260	9	1.5			ADNI_172291	not really, skull, workable if need be
 
 % MCI:
 % ADNI_925	11	1.5	pMCI, mostly MCI
@@ -446,5 +651,8 @@ F1 score, accuracy
 We evalute our models ability to distinguish 
 
 \chapter{Related Work}
+Most similar in terms of goal wegmayr/hoerold which is based on baumgartner, also RNN using deformations
+Most similar in terms of method dalca voxelmorph
+Age cGAN for face aging
 
 \chapter{Discussion}
