@@ -9,13 +9,13 @@ Diffeomorphic transformations are differentiable and invertible and therefore to
 diffeomorphism important because of understanding/grasp of processes
 
 
-In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{voxelmorph} and then discuss our adaptation for the generative brain aging task.
+In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{balakrishnan2019voxelmorph} \cite{dalca2018unsupervised} and then discuss our adaptation for the generative brain aging task.
 
 \section{Diffeomorphic Image Registration}
 \label{chap:voxelmorph}
 In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $x \circ \Phi$ is similar to $y$.
 
-\subsection{Voxelmorph}
+\subsection{Voxelmorph} \label{sec:vox}
 Dalca et al propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
 \begin{equation} \label{eq:voxODE}
 	\frac{\partial \Phi^{(t)}}{\partial t} = v(\Phi^{(t)})
@@ -89,14 +89,14 @@ The first term enforces similarity between the target image $y$ and the warped s
 \subsubsection*{Network Architecture} %TODO(this should be a subsection of Voxelmorph...)
 The paramaters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers with strides of two and three upsampling layers of 32 filters each. All convolutional layers use leaky ReLU activations and kernels of size $3\times3\times3$. TODO illustration of network (don't use from paper, need to do it for my own archs anyway)
 
-Given $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $ using the reparameterization trick \cite{kingma2013}, which is then integrated using newly introduced scaling and squaring layers to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
+Given $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $ using the reparameterization trick \cite{kingma2013auto}, which is then integrated using newly introduced scaling and squaring layers to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
 
-The network is implemented in Keras with a Tensorflow backend and trained end-to-end using the Adam \cite{Adam} optimizer.
+The network is implemented in Keras with a Tensorflow backend and trained end-to-end using the Adam \cite{kingma2014adam} optimizer.
 
 \section{Adaptation for Brain Aging}
-While the tasks of brain registration and generative brain aging may not appear to have much in common at first, both can be described in terms of learning a deformation function. As such, the approach used in \cite{voxelmorph} can presumably be adapted to suit brain aging as well. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
+While the tasks of brain registration and generative brain aging may not appear to have much in common at first, both can be described in terms of learning a deformation function. As such, the approach used in \cite{balakrishnan2019voxelmorph} can presumably be adapted to suit brain aging as well. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
 
-Most importantly, the brain registration task as defined in \cite{voxelmorph} and described above is an unsupervised learning problem where both the source image $x$ and the target image $y$ are available in the prediction step. Conversely, since the goal of the brain aging task is to predict the future state of $x$, the aged target image $y$ is only available in training and therefore cannot be a part of the model's input.
+Most importantly, the brain registration task as defined in \cite{balakrishnan2019voxelmorph} and described above is an unsupervised learning problem where both the source image $x$ and the target image $y$ are available in the prediction step. Conversely, since the goal of the brain aging task is to predict the future state of $x$, the aged target image $y$ is only available in training and therefore cannot be a part of the model's input.
 
 Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale and therefore, the noise introduced as part of the reconstruction term in \autoref{eq:voxloss} may have a negative effect on the model performance.
 
@@ -111,7 +111,7 @@ As described above, the model input is restricted to the source image $x$ and, w
 
 %As described above, the model input is restricted to the source image $x$ due to the supervised nature of the brain aging problem. However, without access to $y$, predicting differences between the source $x$ and target $y$ that are not related to aging, such as artifacts induced during scaning or preprocessing (e.g. skull remnants or misalignment), is virtually impossible. As a consequence, our loss function should be invariant to such changes. Moreover, the reconstruction loss term in \autoref{eq:voxloss} considers $y$ to be a noisy observation of $ x \circ \Phi_z $. While this works well for relatively large deformations, aging-related changes are much smaller in scale
 
-Therefore, we opt to replace the reconstruction loss term in \autoref{eq:voxloss} with an adversarial loss component. We realize this by adding a secondary critic network to the architecture which is trained alongside the generator in an adversarial fashion. Effectively, this tranforms the model into a Generative Adversarial Network (GAN) \cite{GAN}.
+Therefore, we opt to replace the reconstruction loss term in \autoref{eq:voxloss} with an adversarial loss component. We realize this by adding a secondary critic network to the architecture which is trained alongside the generator in an adversarial fashion. Effectively, this tranforms the model into a Generative Adversarial Network (GAN) \cite{goodfellow2014generative}.
 
 In the adversarial setting, a generative model $G$ and a discriminative model $D$ are engaged in a minimax game, in which the generator aims to produce outputs that to the discriminator are indistinguishable from samples drawn from a real data distribution $p_{data}$. More formally, a GAN optimizes the objective
 \begin{equation}
@@ -129,7 +129,7 @@ where $D(x)$ is a probability and $z$ is usually sampled from a latent distribut
 
 where the image pair $(x, y)$ and the corresponding age difference $t$ are samples from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Furthermore, to enable the discriminator to discern pairs with differing time steps, we additionally pass $t$ as an input. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
 
-We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky} in which the discriminator $D$ is replaced by a critic with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani}.
+We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky2017wasserstein} in which the discriminator $D$ is replaced by a critic with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani2017improved}.
 
 \subsection{Additional Loss Terms}
 In addition to the adversarial loss we also examine four additional loss terms and their effects on the model performance.
@@ -170,7 +170,7 @@ TODO(experiments to make choice)
 Moreover, the classifier additionally serves as our baseline for the conversion prediction experiment as described in \autoref{sec:appconvpred}.
 
 \subsubsection*{Similarity Loss}
-Similar to \cite{VAGAN} and \cite{wegmayr}, we introduce an additional loss term intended to enforce similarity and identity preservation between the original image $x$ and the warped image $ x \circ \Phi^{(t)} $ by imposing an $L_1$ loss on their difference
+Similar to \cite{baumgartner2018visual} and \cite{wegmayr}, we introduce an additional loss term intended to enforce similarity and identity preservation between the original image $x$ and the warped image $ x \circ \Phi^{(t)} $ by imposing an $L_1$ loss on their difference
 \begin{equation}
 	\mathcal{L}_{sim}( x, G ) = \norm{ x - G(x) }_1
 \end{equation}
@@ -251,11 +251,8 @@ In practice, the efficiency of the computation can be improved by computing only
 \end{figure}
 
 \subsection{Network Architecture}
-Based on \cite{wegmayr} and \cite{baumgartner} we significantly increase the complexity of the UNet based on wegmayr and VAGAN
-assume that this is necessary due to the higher difficulty of the aging problem vs. registration which, again, gets the target image as an input
-use half size velocity field due to computational limitations, 8x reduction in mem
-also experiment with a time-invariant component extracted from the UNet to model changes not related to aging,
-TODO(beefier UNet, maybe mention TI flow)
+Based on architectures applied to similar problems such as \cite{wegmayr} and \cite{baumgartner2018visual}, we expect the brain aging problem to be a more difficult task compared to brain registration as implemented in Voxelmorph. Therefore, we significantly increase the complexity of the UNet model as shown in \autoref{fig:arcagemorph} TODO(graphic of model). Furthermore, for computational reasons, we generate the velocity and intermediate deformation fields in half-size and upsample the final displacement to full-size before applying it to the input image $x$. Finally, we experiment with a low resolution time-invariant deformation component, extracted from the UNet, to capture differences that are independent of time step $t$ such as misalignments introduced during scanning or preprocessing. Separating the deformation into two components is desirable as it allows ignoring changes independent of time and therefore aging during inference on unseen data.
+However, in preliminary experiments, this component appears to overpower the time-dependent deformations resulting in poor model performance and, as a consequence, is not included in our final model architecture.
 
 \chapter{Applications}
 Our primary goal is to design a generative model $G$ capable of learning and simulating the aging process of the brain. Given an input image $x$, we can then use the trained model $G$ to generate a predicted future state of the brain $\hat y^{(t)} = G(x) = x \circ \Phi^{(t)}$ for any time step $t$.
@@ -276,7 +273,7 @@ Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ a
 Another interesting application is to generate predictions for very large time steps. While we don't expect the model's predictions to be particulary accurate for time steps $t \gg 1$, i.e. time steps significantly exceeding the maximum time step occuring in training data, long-term predictions can be helpful in highlighting areas of significant change as well as in visualizing how the aging process of a healthy brain differs from that of a brain affected by AD.
 
 \section{Feature Attribution}
-Finally, similar to \cite{VAGAN}, our generator can be used to tackle the task of feature attribution, that is, highlighting 
+Finally, similar to \cite{baumgartner2018visual}, our generator has the potential to feature attribution, that is, highlighting 
 
 By training the model on different subsets of our data such as only AD or HC cases, we can 
 
@@ -290,18 +287,18 @@ get heat map of changes
 \section{Synthetic Data} \label{sec:synth}
 In order to validate our architecture, we first train and evaluate our model on a synthetic data set designed to yield easily interpretable results while still being similar in structure to the preprocessed brain data. TODO ref to figure with toy data
 
-Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness decreases from $x_i$ to $y_i$, where the thickness in $y_i$ is defined as $d_{y_i} = (1-t) d_x$, with $d_x$ identical for all $x_i$. We explore two different backgrounds, a constant value of 0 as well as smoothed gaussian noise identical for $x_i$ and $y_i$. TODO maybe more complex toy data
+Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness decreases from $x_i$ to $y_i$, where the thickness in $y_i$ is defined as $d_{y_i} = (1-t) d_x$, with $d_x$ identical for all $x_i$. We explore two different backgrounds, a constant value of 0 as well as smoothed gaussian noise identical for $x_i$ and $y_i$.
 
-We generate a total of 20'000 samples, using 60\% of the data set for training and 20\% for validation and testing each.
+We generate a total of 10'000 samples, using 60\% of the data set for training and 20\% for validation and testing each.
 
 \section{MRI Data}
 To train and validate our brain aging models, we use T1-weighted 3D MRI brain scans. We obtain a large data set of raw images with corresponding subject and image meta data from publically available sources and apply a preprocessing pipeline in order to extract, align and segment the brain tissue. Finally, we generate multiple different data sets tailored to our specific experiments.
 
 \subsection{Data Sources}
-We use a data set consisting of 19'480 brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{ADNI} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{AIBL} studies. The study data was collected over a time period of 15 years involving 2794 subjects TODO(in number of visits).
+We use a data set consisting of 19'480 brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{jack2008alzheimer} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{ellis2009australian} studies. The study data was collected on a total of 9976 visits over a time period of 15 years involving 2794 subjects.
 
 The dimensions of the raw scans depend on the type and model of scanner used and therefore vary slightly, with a median of $ 240 \times 256 \times 170 $. Furthermore, depending on a subject's study group assignment, images are taken at a field strengths of 1.5T or 3T.
-%TODO(maybe intensity, but don't think so)
+
 \subsection{Image Data Preprocessing}
 Our data processing pipeline consists of three primary steps:
 
@@ -311,7 +308,7 @@ Our data processing pipeline consists of three primary steps:
 \item Segmentation
 \end{itemize}
 
-Firstly, in the registration step we align the raw images to a common reference atlas using linear transformations with 12 degrees of freedom. Secondly, we extract the brain from from the surrounding non-brain tissue in what is known as skull stripping or alternatively brain extraction. Both steps are performed utilizing the FSL toolkit \cite{FSL}, using the \texttt{bet} and \texttt{flirt} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise. \autoref{fig:preproc} shows the entire preprocessing pipeline and all its intermediate steps applied to one sample from our data set.
+Firstly, in the registration step we align the raw images to a common reference atlas using linear transformations with 12 degrees of freedom. Secondly, we extract the brain from from the surrounding non-brain tissue in what is known as skull stripping or alternatively brain extraction. Both steps are performed utilizing the FSL toolkit \cite{jenkinson2012fsl}, using the \texttt{flirt} \cite{jenkinson2001global} \cite{jenkinson2002improved} and \texttt{bet} \cite{smith2002fast} \cite{jenkinson2005bet2} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast} \cite{zhang2001segmentation} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this apprach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation (TODO experiment on data), with smaller differences in intensity most likely representing noise. \autoref{fig:preproc} shows the entire preprocessing pipeline and all its intermediate steps applied to one sample from our data set.
 
 \begin{figure}
 	\noindent\makebox[1.1\textwidth]{
@@ -504,25 +501,23 @@ Finally, as the name implies, the \textit{Leave One Visit Out Set} is formed by 
 \chapter{Experiments}
 
 \section{Age Regressor} \label{sec:expagereg}
-Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also pre-train an age regressor, which given an image $x$ produces an estimated age label $\hat a_x$, and use it to estimate the age label, and by extension the time step, of outputs generated by our model. Furthermore, we also include the regressor in the generator loss function as described in \autoref{sec:adaagereg}.
+Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also pre-train an age regressor, which given an image $x$ produces an estimated age label $\hat a_x$, and use it to estimate the age label, and by extension the time step, of outputs generated by our model. Furthermore, the regressor is also included in the generator loss function as described in \autoref{sec:adaagereg}. Given its importance in the validation of our generative model, we evaluate the regressor's performance on a number of different tasks.
 
-We implement the regressor as a 3D CNN with 9 layers, trained using the Adam optimizer with $\alpha = 0.001, \beta_1 = 0.9, \beta_2 = 0.999 $ and $ \epsilon = 0.0001 $. The first eight layers apply batch normalization and we use a batch size of 32.
-
-In this section, we present the results of our age regressor experiments. Given its importance in the validation of our generative model, we evaluate the its performance on a number of different tasks.
-
-TODO(number of steps etc.)
-TODO(multiple models? no. multiple runs?)
-TODO(weighted, non-weighted?)
+The regressor is implemented as a 3D CNN with nine layers, eight of which using batch normalization, and trained using the Adam optimizer with $\alpha = 0.001, \beta_1 = 0.9, \beta_2 = 0.999 $ and $ \epsilon = 0.0001 $.
 
 \subsection*{Absolute Error}
-First, we train the regressor using absolute mean error as the objective function for 30'000 batches of 32 samples each. Using our 5-fold data split, we perform cross validation and present the results in \autoref{tab:resagecrossval}. \autoref{fig:regxrxrhat} shows the estimated age against the ground truth labels.
+First, we train the regressor for 30'000 batches of 32 samples each optimizing the absolute mean error as its objective function. Using our 5-fold data split, we perform cross validation and present the results in \autoref{tab:resagecrossval}. \autoref{fig:regxrxrhat} shows the estimated age $ \hat a_x $ against the ground truth label $a_x$ for one validation split. We note that the estimator tends to the mean, that is, its estimates are most accurate around the mean age across the data set of 75 years, and are low for subjects above the mean and high for subjects below the mean. Given the linear nature of the loss function, this is to be expected.
+
+However, in our generative model, rather than estimating the absolute age of an image, the age regressor is used to estimate the relative age difference $a_y - a_x$ for an image pair $(x, y)$. Therefore, we further evaluate its performance on this task using our data set of image pairs. As before, we perform 5-fold cross validation and report the results in \autoref{tab:regagecrossval}. \autoref{fig:regxryr} compares the absolute losses for $x$ and $y$ and shows the error cancelling effect discussed in \autoref{sec:adaagereg}. Furthermore, we also estimate the age difference as $\hat a_y - \hat a_x$ for one split and visualize it against the ground truth time step in \autoref{fig:regddhatreal}. Using linear regression on our data points, we obtain an intercept of 0.03 and a slope of 0.67, indicating the estimated age difference tends to be too small for increasing $t$. This can be explained by closer examination of \autoref{fig:regxrxrhat} which shows that as the estimate $\hat a_x$ tends to the mean for labels futher away from it, relative age differences are subject to a shrinkage effect. 
+
+Note that since we are performing these experiments on real image pairs, the results represent an upper bound for the performance of our generative model.
 %TODO(crossval)
 
 \begin{figure}
 	\centering
 	\includegraphics[width=.9\linewidth]{images/age_plots/xr_xrhat} 
 	\vspace*{-15pt}
-	\caption{Age regressor estimates on 2937 validation samples from our base image data set. Note how the predicitions tend to the mean, with a slope of 0.58 compared to the target of 1. The subject's diagnosis appears to have only a small impact on the performance.}
+	\caption{Age regressor estimates on 2937 validation samples from our base image data set. Note how the predicitions tend to the mean, with a slope of 0.58 compared to the target of 1. The subject's diagnosis does not appear to have a major impact on the performance.}
 	\label{fig:regxrxrhat}
 \end{figure}
 
@@ -543,30 +538,42 @@ First, we train the regressor using absolute mean error as the objective functio
 \end{figure}
 
 \subsection*{Squared Error}
-We also examine the performance using the same architecture optimizing the squared error with very similar results.
-experiment with squared loss, compare values, basically the same
+We also examine the performance of the same architecture optimizing the mean squared error, with very similar if slightly inferior results presented in \autoref{tab:regagecrossval}
 
 \subsection*{Leave One Visit Out}
-Given that the age regressor is exclusively utilized to estimate relative age differences in our generative model, we perform an additional experiment more directly focussed at that metric. To that end, we train the same model architecture for 100'000 batches of 32 images each from the Leave One Visit Out data set outlined in \autoref{sec:datloo}. We obtain a mean absolute validation error of 1.01 TODO(exact value) years which is significantly lower as expected. However, separating 
+Given that the age regressor is exclusively utilized to estimate relative age differences in our generative model, we perform an additional experiment more directly focussed at that metric. To that end, we train the same model architecture for 100'000 batches of 32 images each from the Leave One Visit Out data set outlined in \autoref{sec:datloo}. We obtain a mean absolute validation error of 1.01 TODO(exact) which, while significanlty lower than the mean absolute error on a single image, is still relatively large considering the simplified problem setting. However, the value is similar to the loss in the pair time step setting as expected. TODO(lame, maybe show that it doesn't simply overfit? Diff to other visits?)
 
 \section{Diagnosis Classifier}
-We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images for which we have increased confidence in the diagnosis labels. Note that we use a binary classifier which does not include any subjects from the healthy control group HC, focussing instead on the more subtle distinctions between thebrains affected by MCI and AD. We examine a number of different convolutional neural network architectures and report the results for three TODO(arbitrary, good idea?) of them. The models are trained on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set. We train all models a total of three times to avoid suboptimal local minima.
+We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images for which we have increased confidence in the diagnosis labels. Note that we exclude all subjects in the healthy control group HC and use a binary classifier focussing on the more subtle distinctions between the effects of MCI and AD. We train model is trained on TODO(number of batches) X batches of size 64, corresponding to Y TODO(number of epochs) epochs on our training set. We train all models a total of three times to avoid suboptimal local minima.
 
-\section{Generator Models}
+\section{Diffeomorphic Models}
 
 \subsection{Voxelmorph}
-To establish a baseline, we first present the results of 
+To establish a baseline, we first train a variation of the Voxelmorph architecture described in \autoref{sec:vox} with minimal modifications to support the brain aging task. These modifications include removing the target image $y$ from the generator input as well as extending the scaling and squaring method to produce output deformations $\Phi^{(t)}$ for arbitrary $t$ as described in \autoref{sec:adaarbtimestep}. We report the results in TODO(what? Conversion? Visual inspection? Age plot?)
 
-Note that we do not perform any hyperparameter tuning which could result in a significant improvement in performance.
+Note that we do not perform any hyperparameter tuning which might result in a significant improvement in performance.
 
-\section{Synthetic Data}
-To validate our adapted architecture, we first train the model on the synthetic data set described in \autoref{sec:synth}.
+\subsection{Synthetic Data}
+To validate our modification to the architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:synth}. The results, presented in \autoref{fig:toydata} and \autoref{tab:toydata} TODO(need this?), confirm the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data.
 
-%TODO(images)
-%TODO(NCC, maybe?)
+\begin{figure}
+	\centering
+	\input{tikz/toydata}
+	\vspace*{-15pt}
+	\caption{Model outputs generated using the synthetic data set. We train the model three times, on noisy or solid backgrounds, with or without applying a sparseness penalty. Each row represents one sample output consisting of the original, the target, and the generated image, the time step $t$ scaled to $[0, 1)$, the velocity field $v$ and its magnitude, as well as its separate dimensions. Note how the sparseness penalty leads to a more interpretable deformation field.} \label{fig:toydata}
+\end{figure}
 
-\subsection{Prediction}
+%TODO(NCC)
+
+\subsection{MRI Data} %TODO(section title doesn't really make sense, more like adapted architecture, but then...)
+
+\subsubsection*{Prediction}
 %TODO(predict brain at real time step)
+% with and without age regressor
+% with training on s1-s4 vs. s1s3/s2s4
+% discuss difference, reasons
+Our first objective is to train the model to reproduce the time steps in our training data
+
 
 \begin{figure}
 	\centering
@@ -581,7 +588,7 @@ To validate our adapted architecture, we first train the model on the synthetic 
 	\centering
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_141445}
 	\vspace*{-15pt}
-	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a subject diagnosed with Alzheimer's Disease. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the corresponding difference maps. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a subject diagnosed with Alzheimer's Disease. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:hcad_ad}
 \end{figure}
 
@@ -589,16 +596,13 @@ To validate our adapted architecture, we first train the model on the synthetic 
 	\centering
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_137014}
 	\vspace*{-15pt}
-	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a healthy subject. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the corresponding difference maps. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a healthy subject. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:hcad_hc}
 \end{figure}
 
-
-\subsection{Fixed Time Step Prediction}
+\subsubsection*{Fixed Time Step Prediction}
 %TODO(predict brain at fixed time step)
 check resulting ages from age reg
-plots plots plots
-mention TI flow in passing, results were bad
 
 \begin{figure}
 	\centering
@@ -608,10 +612,10 @@ mention TI flow in passing, results were bad
 	\label{fig:reghistfixed}
 \end{figure}
 
-
-\subsection{Long-Term Prediction}
+\subsubsection*{Long-Term Prediction}
 AD/HC only, compare
-also regular model? What to show? Age reg doesn't make much sense.
+magnitude of flow differs (maybe numbers, but the finding is qualitative)
+%TODO(mean flow plots)
 
 % pat_id:	n_imgs	field		remark	base_img
 
@@ -625,7 +629,7 @@ also regular model? What to show? Age reg doesn't make much sense.
 % ADNI_887	6	1.5	pMCI		ADNI_120099	really nice, but need better model
 % ADNI_658	6	1.5	pMCI		ADNI_62841	nope
 % ADNI_752	6	1.5	pMCI		ADNI_66508	almost no changes
-% ADNI_331	6	1.5	pMCI		ADNI_141445	yes!! but better model
+% ADNI_331	6	1.5	pMCI		ADNI_141445	yes! but better model
 % ADNI_1243	6	1.5	pMCI	nice	ADNI_214258	small changes, okay
 
 % HC:
@@ -640,19 +644,25 @@ also regular model? What to show? Age reg doesn't make much sense.
 % ADNI_120	10	1.5			ADNI_137014	good, slice 15
 % ADNI_260	9	1.5			ADNI_172291	not really, skull, workable if need be
 
-% MCI:
-% ADNI_925	11	1.5	pMCI, mostly MCI
-
-with/without reg?
-
-\section{Conversion Prediction}
+\subsubsection*{Conversion Prediction}
 F1 score, accuracy
 
-We evalute our models ability to distinguish 
+evalute our models ability to distinguish between stable and progressive cases of MCI
 
 \chapter{Related Work}
-Most similar in terms of goal wegmayr/hoerold which is based on baumgartner, also RNN using deformations
-Most similar in terms of method dalca voxelmorph
-Age cGAN for face aging
+Most similar to our work in terms of the problem setting, \cite{wegmayr} use a WGAN architecture to model the brain's aging process. They propose a UNet-derived model architecture based on \cite{baumgartner2018visual}, which is trained and applied iteratively to obtain predictions for different time steps. In addition to modeling the differences in the aging process between healthy subjects and subjects affected by Alzheimer's Disease, they report cautiously positive results for the task of conversion prediction.
+\cite{baumgartner2018visual} use a WGAN on 3D MRI brain data to perform visual feature attribution and apply it to generate image-specific effect maps of Alzheimer's Disease.
+In contrast to our work, the models used in \cite{wegmayr} and \cite{baumgartner2018visual} are entirely convolutional and do not use deformations.
+
+Pursuing a similar goal, \cite{pathan2018predictive} use a combination of recursive and convolutional neural networks to predict a sequence of deformations based on, and then applied to, a baseline image to obtain follow-up predictions at different time steps. The model is trained on the first image of a subject as well as the sequence of diffeomorphic vector momenta for each additional image which are generated using the LDDMM framework \cite{beg2005computing}.
+
+From a model perspective, the work most similar to ours is \cite{balakrishnan2019voxelmorph} \cite{dalca2018unsupervised}, which forms the basis of our work both in terms of the model design as well as its implementation. While the architecture was initially designed for unsupervised image registration, it has since been adapted to the problem of unsupervised segmentation \cite{dalca2019unsupervised}.
+In the domain of face aging, \cite{palsson2018generative} suggest a conditional GAN \cite{mirza2014conditional} architecture similar to ours using an age regressor in the loss function.
+
+As previously mentioned, early predictions of Alzheimer's Disease onset has been the target of considerable research efforts. \cite{thung2016identification} propose an SVM classifier distinguishing subjects with stable and progressive MCI and report an accuracy of 78.2\%. In contrast to our work, the features are extracted from longitudinal MRI brain data collected over a period of up to 18 months.
+Reporting an accuracy of 92\%, \cite{sun2017detection} also use an SVM classifier on features extracted from a stationary velocity field, which is calculated using \cite{vercauteren2009diffeomorphic} on longitudinal data up to 36 months.
 
 \chapter{Discussion}
+Architecture with many components, hard to pinpoint problem origin
+
+Generative model output validation is hard, regressor as 
