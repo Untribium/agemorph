@@ -16,7 +16,7 @@ In this section, we discuss the general architecture of our model. We first exam
 In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $x \circ \Phi$ is similar to $y$.
 
 \subsection{Voxelmorph} \label{sec:vox}
-Dalca et al propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
+Dalca et al \cite{dalca2018unsupervised} propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
 \begin{equation} \label{eq:voxODE}
 	\frac{\partial \Phi^{(t)}}{\partial t} = v(\Phi^{(t)})
 \end{equation}
