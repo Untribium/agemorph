@@ -6,7 +6,7 @@ Contrasts with additive changes in e.g. classic CNN
 
 Diffeomorphic transformations are differentiable and invertible and therefore topology preserving
 
-diffeomorphism important because of understanding/grasp of processes
+diffeomorphism important because of interpretability, understanding/grasp of processes
 
 
 In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{balakrishnan2019voxelmorph} \cite{dalca2018unsupervised} and then discuss our adaptation for the generative brain aging task.
@@ -86,8 +86,15 @@ The complete loss function can be separated into three terms denoted as follows
 
 The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$. This effect can be shown more explicitly by rewriting the precision term as $ { \frac{\lambda}{2} \sum \sum_{j \in N(I)} ( \mu[i] - \mu[j])^{2} } $, where $N(i)$ denotes the set of neighbors of voxel $i$. Both $\sigma$ and $\lambda$ are treated as hyperparameters, respectively controlling the reconstruction penalty and the magnitude of the velocity field.
 
-\subsubsection*{Network Architecture} %TODO(this should be a subsection of Voxelmorph...)
-The paramaters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers with strides of two and three upsampling layers of 32 filters each. All convolutional layers use leaky ReLU activations and kernels of size $3\times3\times3$. TODO illustration of network (don't use from paper, need to do it for my own archs anyway)
+\subsubsection*{Network Architecture}
+The paramaters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers with strides of two and three upsampling layers of 32 filters each. All convolutional layers use leaky ReLU activations with $\alpha = 0.2$ and kernels of size $3\times3\times3$. See \autoref{fig:archvox} for an illustration of the generator model.
+
+\begin{figure}
+	\centering
+	\input{tikz/arch_vox}
+	\caption{}
+	\label{fig:archvox}
+\end{figure}
 
 Given $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $ using the reparameterization trick \cite{kingma2013auto}, which is then integrated using newly introduced scaling and squaring layers to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
 
@@ -251,8 +258,17 @@ In practice, the efficiency of the computation can be improved by computing only
 \end{figure}
 
 \subsection{Network Architecture}
-Based on architectures applied to similar problems such as \cite{wegmayr} and \cite{baumgartner2018visual}, we expect the brain aging problem to be a more difficult task compared to brain registration as implemented in Voxelmorph. Therefore, we significantly increase the complexity of the UNet model as shown in \autoref{fig:arcagemorph} TODO(graphic of model). Furthermore, for computational reasons, we generate the velocity and intermediate deformation fields in half-size and upsample the final displacement to full-size before applying it to the input image $x$. Finally, we experiment with a low resolution time-invariant deformation component, extracted from the UNet, to capture differences that are independent of time step $t$ such as misalignments introduced during scanning or preprocessing. Separating the deformation into two components is desirable as it allows ignoring changes independent of time and therefore aging during inference on unseen data.
+Based on architectures applied to similar problems such as \cite{wegmayr} and \cite{baumgartner2018visual}, we expect the brain aging problem to be a more difficult task compared to brain registration as implemented in Voxelmorph. Therefore, we significantly increase the complexity of the UNet model as shown in \autoref{fig:archour}.
+%Furthermore, for computational reasons, we generate the velocity and intermediate deformation fields in half-size and upsample the final displacement to full-size before applying it to the input image $x$. Finally,
+Moreover, we experiment with a low resolution time-invariant deformation component, extracted from the UNet, to capture differences that are independent of time step $t$ such as misalignments introduced during scanning or preprocessing. Separating the deformation into two components is desirable as it allows ignoring changes independent of time and therefore aging during inference on unseen data.
 However, in preliminary experiments, this component appears to overpower the time-dependent deformations resulting in poor model performance and, as a consequence, is not included in our final model architecture.
+
+\begin{figure}
+	\centering
+	\input{tikz/arch_our}
+	\caption{Overview of our generator and critic network architectures. Note that the convolutional layers in the generator use batch normalization while those in the critic do not. Depending on the step of the GAN training procedure, the critic input $y$ is either a real or a generated image.}
+	\label{fig:archour}
+\end{figure}
 
 \chapter{Applications}
 Our primary goal is to design a generative model $G$ capable of learning and simulating the aging process of the brain. Given an input image $x$, we can then use the trained model $G$ to generate a predicted future state of the brain $\hat y^{(t)} = G(x) = x \circ \Phi^{(t)}$ for any time step $t$.
@@ -315,7 +331,8 @@ Firstly, in the registration step we align the raw images to a common reference 
 		\centering
 		\input{tikz/preproc}
 	}
-	\caption{Preprocessing pipeline visualized for one sample} \label{fig:preproc}
+	\caption{Preprocessing pipeline visualized for one sample}
+	\label{fig:preproc}
 \end{figure}
 
 Note that since the primary output of our preprocessing pipeline is based entirely on segmentation masks, one could combine the T1-weighted scans with data from different brain imaging modalities such as T2-weighted MRI data or proton density (PD) scans, therefore drastically increasing the number of possible data sources. However, we do not validate or pursue this idea in the context of this thesis.
@@ -328,7 +345,7 @@ In order to run our experiments, we generate a number of data sets for the diffe
 Our data sets are divided into five equal splits $ \{ \mathcal{S}_i \}_{i\ \in\ 0\;..\;4} $ of 20\% each which are used in various different configurations detailed in the corresponding experiment's section. We perform this split on a subject basis and do so globally, in the sense that if a subject appears in a specific data set, it is always assigned to the same split. In other words, for any pair of splits $ \mathcal{S}_i^A $ and $ \mathcal{S}_j^B $ taken from data sets $A$ and $B$ with $ i \neq j $, the intersection $ { \mathcal{S}_i^A \cap \mathcal{S}_j^B = \varnothing } $ is guaranteed to be empty.
 
 \subsubsection*{Base Image Set} \label{sec:datsingles}
-The \textit{Base Image Set} forms the foundation for all other data sets. It consists of all images $x_{i, k}$ and the meta data for the corresponding visits $v_i$ for which $t_i$ and $a_i$ are obtainable. We mainly use this set in the training of our age regressor models.
+The \textit{Base Image Set} forms the foundation for all other data sets. It consists of all images $x_{i, k}$ and the meta data for the corresponding visits $v_i$ for which $t_i$ and $a_i$ are obtainable. The primary use for this set is in the training of our age regressor models.
 
 \begin{table}[h]
 	\begin{center}
@@ -446,7 +463,7 @@ The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject
 
 \begin{figure}[h]
 	\centering
-	\includegraphics[width=0.9\linewidth]{images/timestep_plots/hist} 
+	\includegraphics[width=\linewidth]{images/timestep_plots/hist} 
 	\caption{The historgram for time step $t$ across all pairs in the data set. To mitigate the bias towards smaller $t$, we calculate sample weights to be used during training.}
 	\label{fig:timestephist}
 \end{figure}
@@ -583,12 +600,11 @@ Our first objective is to train the model to reproduce the time steps in our tra
 	\label{fig:regddhatfake}
 \end{figure}
 
-
 \begin{figure}
 	\centering
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_141445}
 	\vspace*{-15pt}
-	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a subject diagnosed with Alzheimer's Disease. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column contains a series of real images from a \textbf{subject diagnosed with Alzheimer's Disease}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:hcad_ad}
 \end{figure}
 
@@ -596,7 +612,7 @@ Our first objective is to train the model to reproduce the time steps in our tra
 	\centering
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_137014}
 	\vspace*{-15pt}
-	\caption{The center column, top to bottom, contains a series of real images in one-year steps from a healthy subject. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column contains a series of real images from a \textbf{healthy subject}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:hcad_hc}
 \end{figure}
 
