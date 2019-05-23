@@ -6,15 +6,18 @@
 
 
 
-The past decades have seen medical research advancing at a rapid rate, resulting in a dramatic increase of the average human life expectancy \cite{owidlifeexpectancy}. As a consequence, the number of cases of aging-related neurodegenerative diseases such as Alzheimer's Disease has increased significantly and is expected to keep rising, reaching over 100 million Alzheimer's cases by 2050 \cite{brookmeyer2007forecasting}. For this reason, advancing the understanding of the brain's aging process as well as early prediction and treatment methods of degenerative diseases have attracted considerable research efforts. In our work, we propose a generative model to simulate the aging process on T1-weighted MRI brain scans based on diffeomorphic deformations.
+The past decades have seen medical research advancing at a rapid rate, resulting in a dramatic increase of the average human life expectancy \cite{owidlifeexpectancy}. As a consequence, the number of cases of aging-related neurodegenerative diseases such as Alzheimer's Disease has increased significantly and is expected to keep rising, reaching over 100 million Alzheimer's cases by 2050 \cite{brookmeyer2007forecasting}. For this reason, advancing the understanding of the brain's aging process as well as early prediction and treatment methods of degenerative diseases have attracted considerable research efforts. In our work, we propose a generative model to simulate the aging process on T1-weighted MRI brain scans.% based on diffeomorphic deformations.
 
-Generative models, most prominently Variational Autoencoders (VAEs) and Generative Adversarial Networks (GANs), have been successfully applied to model gradual changes in image data for wide range of domains such as face aging, image registration and style transfer. The goal of this thesis is to apply some of these methods to the problem of brain aging. Specifically, we consider a T1-weighted MRI image $x$ taken at time $t_0$ and aim to predict from it an image $y$ at some specified time $t_1$ in the future. If successful, this could pave the way for a number of applications TODO(fix)
+Generative models, most prominently Variational Autoencoders (VAEs) \cite{kingma2013auto} and Generative Adversarial Networks (GANs) \cite{goodfellow2014generative}, have been successfully applied to model gradual changes in image data for wide range of settings such as face aging \cite{palsson2018generative}, image registration \cite{balakrishnan2019voxelmorph} and style transfer \cite{zhu2017unpaired}. The goal of this thesis is to apply some of these methods to the problem of brain aging. Specifically, we consider a model which given a T1-weighted MRI image $x$ taken at time $t_0$ aims to predict an image $y$ at some time $t_1$ in the future. If sufficiently accurate, such a model could pave the way for a number of applications. For instance, existing diagnostic tools which operate on MRI data such as diagnosis classifiers can be applied directly to the generated image, therefore leveraging decades of research in the field. Furthermore, insights into the aging process and the effects of degenerative diseases can be gained by aggregating the model's outputs over different groups of subjects.
+
+Diffeomorphic deformations are popularly used in medical imaging to model biological processes. Unlike entirely convolutional models, diffeomorphisms are invertible, thus generally resulting in a more realistic representation of the natural processes while also producing more interpretable results.
+
 
 Our main contributions are:
 
 \begin{itemize}
-	\item we model the brain's aging process as diffeomorphic deformations, adapting the architecture proposed by \cite{dalca2018unsupervised}
+	\item we model the brain aging process using diffeomorphic deformations%, adapting the architecture proposed by \cite{dalca2018unsupervised}
 	\item we adapt the scaling and squaring method for arbitrary timesteps
-	\item we use the generative model to predict the conversion probability of patients with MCI
-	\item we validate that the model does indeed result in aged images using an age regressor
+	\item we evaluate our model's ability to produce older looking images TODO(fix)
+	\item we use our model to predict the Alzheimer's Disease conversion probability of patients with Mild Cognitive Impairment
 \end{itemize}
