@@ -1,22 +1,18 @@
 \chapter{Generative Diffeomorphic Deformation Models}
-Generative models have been successfully applied in a wide range of medical image analysis tasks such as TODO list some applications. 
+Generative models have been successfully applied to a wide range of medical image analysis tasks such as image registration \cite{balakrishnan2019voxelmorph}, segmentation \cite{dong2017automatic} and visual feature attribution \cite{baumgartner2018visual}. Of particular interest are deformation-based models due to their ability to closely model the gradual changes occuring in biological processes.
+%In contrast to the purely convolution approach, which is in essentially a universal function approximator, deformation-based models are constrained to operations that closely match the actual processes observed in human tissue.
+%Particularly in the case of MRI data, voxel intensities are relative, deformation better than additional map
 
-Diffeomorphic deformations of particular interest due to the organic nature and modeling of gradual changes
-Contrasts with additive changes in e.g. classic CNN
+A deformation can be described by a diffeomorphism, a function which is differentiable and invertible, and therefore topology preserving. It follows that by using a diffeomorphic approach, a model can be limited to a set of more realistic operations which generally results in more interpretable outputs.
 
-Diffeomorphic transformations are differentiable and invertible and therefore topology preserving
-
-diffeomorphism important because of interpretability, understanding/grasp of processes
-
-
-In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{balakrishnan2019voxelmorph} \cite{dalca2018unsupervised} and then discuss our adaptation for the generative brain aging task.
+In this section, we discuss the general architecture of our model. We first examine the brain registration model proposed in \cite{balakrishnan2019voxelmorph} \cite{dalca2018unsupervised} followed by a discussion of our adaptations for the generative brain aging task.
 
 \section{Diffeomorphic Image Registration}
 \label{chap:voxelmorph}
 In medical imaging, deformable image registration tackles the problem of warping one image onto another. More formally, given two scans $x$ and $y$, the aim is to find a deformation function $\Phi$ such that $x \circ \Phi$ is similar to $y$.
 
 \subsection{Voxelmorph} \label{sec:vox}
-Dalca et al propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Specifically, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
+Dalca et al \cite{dalca2018unsupervised} propose a deep learning architecture to learn such a mapping for 3-dimensional MRI brain data. Formally, given $x$ and $y$ the model generates a stationary velocity field $v$ which defines the deformation ${\Phi : \R^3 \rightarrow \R^3}$ mapping $x$ to $y$ through the ordinary differential equation (ODE)
 \begin{equation} \label{eq:voxODE}
 	\frac{\partial \Phi^{(t)}}{\partial t} = v(\Phi^{(t)})
 \end{equation}
@@ -108,7 +104,7 @@ Most importantly, the brain registration task as defined in \cite{balakrishnan20
 Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale and therefore, the noise introduced as part of the reconstruction term in \autoref{eq:voxloss} may have a negative effect on the model performance.
 
 Finally, while intermediate deformations $\Phi^{(t)}$ for time steps $t \notin \{0, 1\}$ are not of primary interest in the brain registration task, the ability to predict a brain image $G(x) = x \circ \Phi_z^{(t)}$ for arbitrary $t$ promises valuable insights into the progression of neurodegenerative diseases as well as the brain's aging process in general.
-Furthermore, the ability to train on image pairs with a large range of time steps $t$ is also crucial as the number of image pairs for any particular fixed $t$ is very limited. Moreover, a model trained on a range of time steps should be able to generalize much more  TODO ugly sentence, fix, also mention better generalization with different t
+Furthermore, the ability to train on image pairs over a large range of different time steps is also beneficial as the number of image pairs for any particular fixed $t$ is very limited. Moreover, training on a continuous range of time steps as opposed to a limited number of fixed intervals should result in improved generalization.
 
 \subsection{Adversarial Loss}
 % maybe say what we do first, then why?
@@ -160,7 +156,7 @@ We consider two different possible loss terms
 with $(1)$ using ground truth labels whenever available and $(2)$ using the regressor throughout. We hypothesize (2) to be superior due to inaccuracies of the age regressor cancelling out. This assumption is supported by our experimental results in \autoref{sec:expagereg} and consequently, we use (2) for our model.
 
 \subsubsection*{Diagnosis Classifier}
-Similar to the age regressor, we also add a loss term based on a diagnosis classifier $C$ to encourage the model to understand and distinguish between different diagnoses. Let $d_x$ denote the ground truth diagnosis label assigned to $x$ (with 0 = MCI, 1 = AD) and $\hat d_x$ denote the classifier's estimated probability of the brain in image $x$ being affected by AD. As before, we examine two possible cross entropy loss terms between the ground truth and the estimated probability respectively
+Similar to the age regressor, we also add a loss term based on a diagnosis classifier $C$ to encourage the model to understand and distinguish between different diagnoses. Let $d_x$ denote the ground truth diagnosis label assigned to $x$ (with 0 = MCI, 1 = AD) and $\hat d_x$ denote the classifier's estimated probability of the brain in image $x$ being affected by AD. As before, we examine two possible cross entropy loss terms between ground truth labels and the estimated probabilities respectively and implement $(2)$, following the same reasoning used in selecting the age regressor loss term.
 
 \begin{equation}
 	\begin{split}
@@ -172,9 +168,7 @@ Similar to the age regressor, we also add a loss term based on a diagnosis class
 	\end{split}
 \end{equation}
 
-TODO(experiments to make choice)
-
-Moreover, the classifier additionally serves as our baseline for the conversion prediction experiment as described in \autoref{sec:appconvpred}.
+In addition to its use in this loss term, the classifier also serves as our baseline for the conversion prediction experiment as described in \autoref{sec:appconvpred}.
 
 \subsubsection*{Similarity Loss}
 Similar to \cite{baumgartner2018visual} and \cite{wegmayr}, we introduce an additional loss term intended to enforce similarity and identity preservation between the original image $x$ and the warped image $ x \circ \Phi^{(t)} $ by imposing an $L_1$ loss on their difference
@@ -196,7 +190,7 @@ Note that we choose not to scale the similarity loss with respect to time step $
 	\end{subfigure}
 	 
 	\caption{$L_1$ difference between image pairs $(x, y)$ from our data set for both the full-size and the cropped scans. While the difference increases with $t$, it does so rather slowly with slopes of 0.007 and 0.011 respectively.}
-	%TODO(explain colors, is age when x was taken)
+	%TODO(explain colors, is age when image taken)
 	\label{fig:l1plots}
 \end{figure}
 
@@ -680,5 +674,7 @@ Reporting an accuracy of 92\%, \cite{sun2017detection} also use an SVM classifie
 
 \chapter{Discussion}
 Architecture with many components, hard to pinpoint problem origin
+
+Interpretability of WGAN loss
 
 Generative model output validation is hard, regressor as 
