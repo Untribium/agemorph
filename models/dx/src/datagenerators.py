@@ -14,13 +14,18 @@ import nibabel as nib
 
 def clf_gen(csv_gen):
     # convert dx labels (2=MCI, 3=AD in csv, 0=MCI, 1=AD for clf)
+    
     while True:
         imgs, lbls = next(csv_gen)
-        yield imgs, [lbls[0] - 2]
+
+        labels = (lbls[0] - 2).astype(int)
+        one_hot = np.squeeze(np.eye(2)[labels.reshape(-1)]) 
+
+        yield imgs, [one_hot]
 
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
-                                                n_epochs=None, verbose=False):
+                                 shuffle=True, n_epochs=None, verbose=False):
     """
     batch generator from csv
     Arguments:
@@ -32,7 +37,7 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                 columns in csv containing non-image data
     batch_size: int
                 desired batch size
-    split:      str
+    split:      str or (str, str)
                 which data split to use, expects 'split' column in csv
     sample:     bool
                 sample each batch from all samples, otherwise shuffle then split
@@ -48,8 +53,19 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
     csv = pd.read_csv(csv_path)
 
     if split is not None:
-        assert 'split' in csv.columns, 'csv has no split column'
-        csv = csv[csv['split'] == split]
+
+        split_col = 'split'
+
+        if isinstance(split, tuple):
+            split_col, split = split
+        
+        if isinstance(split, str):
+            split = [split]
+ 
+        assert split_col in csv.columns, 'csv has no column "{}"'.format(split_col)
+        
+        csv = csv[csv[split_col].isin(split)]
+
     else:
         split = 'data'
 
@@ -71,7 +87,7 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
         if verbose:
             print('starting {} epoch {}'.format(split, epoch))
 
-        if not sample:
+        if not sample and shuffle:
             csv = csv.sample(frac=1) # shuffle csv
             csv.reset_index(inplace=True, drop=True)
        

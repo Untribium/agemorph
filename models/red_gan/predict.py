@@ -49,18 +49,21 @@ def predict(gpu_id, csv_path, split_col, split, batch_size, out_dir, gen_model_f
     config_path = os.path.join(model_dir, 'config.pkl')
     
     assert os.path.isfile(config_path), "model_config not found"
-    
-    model_config = pickle.load(open(config_path, 'rb'))
-
+   
+    if isinstance(split, str):
+        split = [split]
+ 
     # create out_dir
     if out_dir is None or out_dir == '':
-        out_dir = os.path.join(model_dir, 'predict', split, model_name)
+        out_dir = os.path.join(model_dir, 'predict', split_col+'_'+''.join(split), model_name)
     
     print('out_dir:', out_dir)
  
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 
+    model_config = pickle.load(open(config_path, 'rb'))
+    
     # extract config variables
     vol_shape = model_config['vol_shape']
     max_delta = model_config['max_delta']
@@ -88,7 +91,7 @@ def predict(gpu_id, csv_path, split_col, split, batch_size, out_dir, gen_model_f
    
     if not os.path.isfile(csv_out_path): 
         csv = pd.read_csv(csv_path)
-        csv = csv[csv[split_col] == split]
+        csv = csv[csv[split_col].isin(split)]
 
         # backup then overwrite delta if provided, else use delta from csv
         if delta is not None:
@@ -193,7 +196,8 @@ if __name__ == "__main__":
     parser.add_argument("--csv", type=str, dest="csv_path", default=None)
     parser.add_argument("--split_col", type=str,
                         dest="split_col", default="split")
-    parser.add_argument("--split", type=str, dest="split", default='test')
+    parser.add_argument("--split", type=str, nargs="+",
+                        dest="split", default=['test'])
     parser.add_argument("--batch_size", type=int, dest="batch_size", default=1)
     parser.add_argument("--delta", type=float, dest="delta", default=None)
     parser.add_argument("--out_dir", type=str, dest="out_dir", default=None)

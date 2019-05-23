@@ -29,7 +29,7 @@ import neuron.layers as nrn_layers
 import neuron.utils as nrn_utils
 
 
-def unet_core(vol_size, enc_nf, dec_nf, vel_resize=1.0):
+def unet_core(vol_size, enc_nf, dec_nf, vel_resize=0.5):
     """
     unet architecture for voxelmorph models presented in the CVPR 2018 paper. 
     You may need to modify this code (e.g., number of layers) to suit your project needs.
@@ -108,7 +108,7 @@ def cvpr2018_net(vol_size, enc_nf, dec_nf, full_size=True, indexing='ij'):
     return model
 
 
-def miccai2018_net(vol_size, enc_nf, dec_nf, int_steps=5, indexing='ij', vel_resize=1.0):
+def miccai2018_net(vol_size, enc_nf, dec_nf, int_steps=6, indexing='ij', vel_resize=0.5):
     """
     architecture for probabilistic diffeomoprhic VoxelMorph presented in the MICCAI 2018 paper. 
     You may need to modify this code (e.g., number of layers) to suit your project needs.

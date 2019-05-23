@@ -88,10 +88,11 @@ def gan_generators(csv_gen, vol_shape, flow_shape, max_delta, int_steps, use_reg
             labels += [flow_dummy, feat_dummy]      # flow, features
            
             if use_reg:
-                labels += [dt_zero]
+                labels += [dt_zero]                 # for relative age l1 loss
 
             if use_clf:
-                labels += [batch['pat_dx_1'] - 2]   # AD=3, MCI=2 in csv
+                #labels += [batch['pat_dx_1'] - 2]   # AD=3, MCI=2 in csv
+                labels += [dt_zero]                 # for soft label xe loss
 
             yield inputs, labels, batch
     
@@ -135,8 +136,7 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
         split_col = 'split'
 
         if isinstance(split, tuple):
-            split_col = split[0]
-            split = split[1]
+            split_col, split = split
 
         if isinstance(split, str):
             split = [split]

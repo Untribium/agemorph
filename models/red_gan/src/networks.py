@@ -166,10 +166,16 @@ def gan_models(vol_shape, batch_size, loss_class, cri_loss_weights, cri_optimize
     
     # calculate dx classifier logits and add to outputs 
     if clf_model_file:
+        clf_yr_gen = clf_net([yr_gen])
         clf_yf_gen = clf_net([yf_gen]) # dx logits [mci, ad]
         
-        gen_outputs.append(clf_yf_gen)
-        gen_loss.append(sparse_categorical_crossentropy)
+        # soft-label cross entropy loss
+        clf_xe_gen = CrossEntropy()([clf_yr_gen, clf_yf_gen]) 
+
+        print(K.int_shape(clf_xe_gen))
+
+        gen_outputs.append(clf_xe_gen)
+        gen_loss.append(loss_class.l1_loss)
  
     gen_model = Model(inputs=gen_inputs, outputs=gen_outputs)
 
@@ -231,7 +237,8 @@ def unet_core(vol_shape, vel_resize, batchnorm, leaky):
     features = KL.Dense(400)(e9)
     print(K.int_shape(features))
 
-    d9 = KL.Dense(3200)(features)
+    n_units = np.array(shapes[-1]).prod() * 64
+    d9 = KL.Dense(n_units)(features)
     print(K.int_shape(d9))
 
     d8 = KL.Reshape((*shapes[-1], 64))(d9)                       #  5  2  5  64
@@ -489,6 +496,21 @@ class RandomWeightedAverage(Layer):
 
     def compute_output_shape(self, input_shape):
         return input_shape[0]
+
+
+class CrossEntropy(Layer):
+    
+    def __init__(self, **kwargs):
+        super(CrossEntropy, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        super(CrossEntropy, self).build(input_shape)
+
+    def call(self, x):
+        return K.categorical_crossentropy(x[0], x[1], from_logits=True)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[0][:-1] + (1,)
 
 
 class Negate(Layer):

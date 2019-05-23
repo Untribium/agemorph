@@ -51,47 +51,50 @@ class TensorBoardExt(TensorBoardImage):
         n_outputs = 3
 
         # generate images on validation data for tensorboard
-        [xr, b], [yr, _] = next(self.valid_data)
+        inputs, labels, batch = next(self.valid_data)
 
-        print(b)
+        yf, flow_params = self.model.predict(inputs)
 
-        yf, flow = self.model.predict([xr, b])
+        xr, _ = inputs
+        yr, _ = labels
+
+        delta = batch['delta_t']
 
         # delta bin to int to channel        
-        d = np.array([to_int(bits) for bits in b])
-        d = d / 2**(self.int_steps+1)
-        d = d.reshape((-1, 1, 1, 1, 1))
-        d = np.ones_like(xr, dtype=np.float32) * d
+        delta = delta.reshape((-1, 1, 1, 1, 1))
+        delta = np.ones_like(xr, dtype=np.float32) * delta
 
         # delta indicator
         lin = np.linspace(0, 1, xr.shape[1])
         deltas = np.ones_like(xr) * lin[None, :, None, None, None]
-        deltas = ((deltas < d) * 1.2 - 0.2)[:, :, :, :10, :]
+        deltas = ((deltas < delta) * 1.2 - 0.2)[:, :, :, :10, :]
 
         # scans
+        slice_scans = xr.shape[2] // 2
         channels = [xr, yr, yf, deltas]
         img0 = np.concatenate(channels, axis=3)[:n_outputs]
-        img0 = np.concatenate(img0, axis=0)[:, 40, :, :]
+        img0 = np.concatenate(img0, axis=0)[:, slice_scans, :, :]
 
         # flow
-        flow_mean = flow[..., :3]
+        slice_flows = flow_params.shape[2] // 2
+        flow_mean = flow_params[..., :3]
         logs['flow_mean'] = np.abs(flow_mean).mean()
         flow_mean = normalize_dim(flow_mean, axis=0)
 
-        flow_std = flow[..., 3:]
+        flow_std = flow_params[..., 3:]
         flow_std = np.exp(flow_std)
         logs['flow_std'] = np.abs(flow_std).mean()
         flow_std = normalize_dim(flow_std, axis=0)
 
-        channels = [xr, flow_mean, flow_std]
+        channels = [flow_mean, flow_std]
         img1 = np.concatenate(channels, axis=4)
         img1 = np.moveaxis(img1, 4, 0)
         img1 = np.concatenate(img1, axis=3)[:n_outputs]
-        img1 = np.concatenate(img1, axis=0)[:, 40, :, None]
+        img1 = np.concatenate(img1, axis=0)[:, slice_flows, :, None]
 
         img_logs = {
-            'xr_yr_yf': img0,
-            'flow': img1
+            'scans': img0,
+            'flows': img1
         }
 
         super(TensorBoardExt, self).on_epoch_end(epoch, logs, img_logs)

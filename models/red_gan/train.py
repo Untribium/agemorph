@@ -294,7 +294,7 @@ if __name__ == "__main__":
     parser.add_argument("--vol_shape", type=int, nargs="+",
                         dest="vol_shape", default=[80, 32, 80])
     parser.add_argument("--vel_resize", type=float,
-                        dest="vel_resize", default=1.0, help="vel_resize")
+                        dest="vel_resize", default=0.5, help="vel_resize")
     parser.add_argument("--lr", type=float,
                         dest="lr", default=1e-4, help="learning rate")
     parser.add_argument("--beta1", type=float,

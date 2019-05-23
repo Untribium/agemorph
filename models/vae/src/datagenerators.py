@@ -12,24 +12,52 @@ import pandas as pd
 import nibabel as nib
 from .utils import to_bin
 
+def delta_bits(delta, max_delta, int_steps):
+   
+    # shift so 1111... ([1] * int_steps) corresponds to max_delta
+    shifted = delta * 2**(int_steps+1)
+    shifted = shifted.astype(int)
 
-def vae_gen(csv_gen, max_delta, int_steps, kl_dummy):
+    # convert to bits
+    bits = [to_bin(d[0], 16) for d in shifted]
     
+    return np.array(bits)
+   
+ 
+def delta_channel(delta, vol_shape):
+
+    # slicer to reshape
+    slicer = (slice(None),) * 2
+    slicer += (None,) * (len(vol_shape))
+
+    channel = np.ones((delta.shape[0], *vol_shape, 1), dtype=np.float32)
+    channel *= delta[slicer]
+
+    return channel
+   
+
+# returns two gens for GAN generator and critic
+def vae_generator(csv_gen, flow_shape, max_delta, int_steps, batch_size=None):
+   
+    # watch out, drops first batch!
+    if batch_size is None: 
+        batch_size = next(csv_gen)['img_path_0'].shape[0]
+
+    # loss labels
+    flow_dummy = np.zeros((batch_size, *flow_shape, 1))
+
     while True:
+        batch = next(csv_gen)
+
+        # scale delta to [0, 1)
+        batch['delta_t'] /= max_delta+1
+
+        inputs = [batch['img_path_0']]
+        inputs += [delta_bits(batch['delta_t'], max_delta, int_steps)]
         
-        imgs, lbls = next(csv_gen)
+        labels = [batch['img_path_1'], flow_dummy]
 
-        lbls[0] = lbls[0][:, 0]
-
-        delta = lbls[0] / (max_delta + 1)
-
-        delta_shift = delta * 2**(int_steps + 1)
-        delta_shift = delta_shift.astype(int)
-
-        delta_bin = [to_bin(d, 16) for d in delta_shift]
-        delta_bin = np.array(delta_bin)
-
-        yield [imgs[0], delta_bin, *lbls[1:]], [imgs[1], kl_dummy]
+        yield inputs, labels, batch
 
 
 def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True, 
@@ -65,8 +93,19 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
     csv = pd.read_csv(csv_path)
 
     if split is not None:
-        assert 'split' in csv.columns, 'csv has no split column'
-        csv = csv[csv['split'] == split]
+
+        split_col = 'split'
+
+        if isinstance(split, tuple):
+            split_col, split = split
+
+        if isinstance(split, str):
+            split = [split]
+
+        assert split_col in csv.columns, 'csv has no column "{}"'.format(split_col)
+        
+        csv = csv[csv[split_col].isin(split)]
+
     else:
         split = 'data'
 
@@ -98,10 +137,10 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                 batch = csv.sample(batch_size, weights=weights)
             else:
                 batch = csv.iloc[b*batch_size:(b+1)*batch_size]
- 
-            # MR scans
-            imgs = []
 
+            out = {}
+ 
+            # scans
             for img_key in img_keys:
                 concat = []
                 
@@ -110,11 +149,9 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                     img = img[np.newaxis, ..., np.newaxis] # add batch_dim and channel_dim
                     concat.append(img)
 
-                imgs.append(np.concatenate(concat, axis=0))
+                out[img_key] = np.concatenate(concat, axis=0)
 
-            # lbls (e.g. pat_dx, pat_age, img_id)
-            lbls = []
-
+            # labels
             for lbl_key in lbl_keys:
                 concat = []
 
@@ -123,9 +160,9 @@ def csv_gen(csv_path, img_keys, lbl_keys, batch_size, split=None, sample=True,
                     lbl = lbl[np.newaxis, ...] # add batch_dim
                     concat.append(lbl)
 
-                lbls.append(np.concatenate(concat, axis=0))
+                out[lbl_key] = np.concatenate(concat, axis=0)
 
-            yield imgs, lbls
+            yield out
 
         epoch += 1
 

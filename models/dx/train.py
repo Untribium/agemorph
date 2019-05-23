@@ -9,11 +9,12 @@ from datetime import datetime
 # third-party imports
 import tensorflow as tf
 import numpy as np
+import pickle
 from keras.backend.tensorflow_backend import set_session
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint, TensorBoard
-from keras.losses import sparse_categorical_crossentropy
-from keras.metrics import sparse_categorical_accuracy
+from keras.losses import categorical_crossentropy
+from keras.metrics import categorical_accuracy
 from keras.utils import multi_gpu_model
 
 # project imports
@@ -35,6 +36,9 @@ def train(csv_path,
           batchnorm,
           maxpool,
           leaky,
+          split_col,
+          split_train,
+          split_eval,
           valid_steps):
 
     """
@@ -129,20 +133,29 @@ def train(csv_path,
     # also train on conversion set, doesn't impact gen performance
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='train')
+                              sample=True, split=(split_col, split_train))
     
     valid_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='eval')
+                              sample=False, shuffle=False, 
+                              split=(split_col, split_eval))
     
     predi_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='eval')
+                              sample=True, split=(split_col, split_eval))
    
     train_data = datagenerators.clf_gen(train_csv_gen)
     valid_data = datagenerators.clf_gen(valid_csv_gen)
     predi_data = datagenerators.clf_gen(predi_csv_gen)
 
+    # write model_config to run_dir
+    config_path = os.path.join(model_dir, 'config.pkl')
+    pickle.dump(model_config, open(config_path, 'wb'))
+    
+    print('model_config:')
+    print(model_config)
+
+    # tboard callbacks
     tboard_callback = TensorBoard(log_dir=model_dir)
     tboard_callback.set_model(model)
 
@@ -162,8 +175,8 @@ def train(csv_path,
             mg_model = model
 
         mg_model.compile(optimizer=model_opt,
-                         loss=[sparse_categorical_crossentropy],
-                         metrics=[sparse_categorical_accuracy])
+                         loss=[categorical_crossentropy],
+                         metrics=[categorical_accuracy])
 
         mg_model.fit_generator(train_data,
                          epochs=epochs,
@@ -205,10 +218,17 @@ if __name__ == "__main__":
     parser.add_argument("--layers", dest="layers", type=int, nargs="+",
                         help="pairs of channel, strides for each layer",
                         default=[8,2,32,2,64,1,64,2,128,1,128,1,256,1,256,1])
-    parser.add_argument("--valid_steps", type=int, default=50,
+    parser.add_argument("--valid_steps", type=int, default=12,
                         dest="valid_steps", help="valid_steps")
     parser.add_argument("--leaky", type=float, default=0.0,
                         dest="leaky", help="leakiness of ReLU, float >= 0")
+    parser.add_argument("--split_col", type=str,
+                        dest="split_col", default="split")
+    parser.add_argument("--split_train", type=str, nargs="+",
+                        dest="split_train", default=["train"])
+    parser.add_argument("--split_eval", type=str, nargs="+",
+                        dest="split_eval", default=["eval"])
+    
     parser.add_argument("--batchnorm", dest="batchnorm", action="store_true")
     parser.add_argument("--maxpool", dest="maxpool", action="store_true")
     parser.set_defaults(batchnorm=False, maxpool=False)

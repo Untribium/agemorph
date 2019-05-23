@@ -9,6 +9,7 @@ from datetime import datetime
 # third-party imports
 import tensorflow as tf
 import numpy as np
+import pickle
 from keras.backend.tensorflow_backend import set_session
 from keras.optimizers import Adam
 from keras.callbacks import Callback, ModelCheckpoint, TensorBoard
@@ -25,6 +26,7 @@ def train(csv_path,
           epochs,
           steps_per_epoch,
           vol_shape,
+          sample_weights,
           batch_size,
           lr,
           beta_1,
@@ -36,6 +38,10 @@ def train(csv_path,
           loss_weights,
           loss_fn,
           leaky,
+          split_col,
+          split_train,
+          split_eval,
+          sample_eval,
           valid_steps):
 
     """
@@ -86,6 +92,7 @@ def train(csv_path,
     model_dir += '_ep={}'.format(epsilon)
     model_dir += '_bn={}'.format(batchnorm)
     model_dir += '_mp={}'.format(maxpool)
+    model_dir += '_sw={}'.format(sample_weights)
     model_dir += '_lk={}'.format(leaky)
     model_dir += '_ls={}'.format(layers)
     model_dir += '_lw={}'.format(loss_weights)
@@ -100,7 +107,6 @@ def train(csv_path,
     # parse layers
     layers = list(zip(layers[0::2], layers[1::2]))
     print(layers)
-
 
     valid_dir = os.path.join(model_dir, 'eval')
 
@@ -141,20 +147,30 @@ def train(csv_path,
     # also train on conversion set, doesn't impact gen performance
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='train')
+                              sample=True, split=(split_col, split_train),
+                              weights=sample_weights)
     
     valid_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='eval')
+                              sample=sample_eval, shuffle=False,
+                              split=(split_col, split_eval))
     
     predi_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                               lbl_keys=lbl_keys, batch_size=batch_size,
-                              sample=True, split='eval')
+                              sample=True, split=(split_col, split_eval))
    
     train_data = datagenerators.reg_gen(train_csv_gen)
     valid_data = datagenerators.reg_gen(valid_csv_gen)
     predi_data = datagenerators.reg_gen(predi_csv_gen)
 
+    # write model_config to run_dir
+    config_path = os.path.join(model_dir, 'config.pkl')
+    pickle.dump(model_config, open(config_path, 'wb'))
+    
+    print('model_config:')
+    print(model_config)
+
+    # tboard callbacks
     tboard_callback = TensorBoard(log_dir=model_dir)
     tboard_callback.set_model(model)
 
@@ -191,12 +207,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--csv", type=str,
                         dest="csv_path", help="data folder")
+    parser.add_argument("--sample_weights", type=str,
+                        dest="sample_weights", default=None)
     parser.add_argument("--gpu", type=str, default=0,
                         dest="gpu_id", help="gpu id number")
     parser.add_argument("--tag", type=str, default='',
                         dest="tag", help="tag added to run dir")
     parser.add_argument("--vol_shape", type=int, nargs="+",
-                        dest="vol_shape", default=[80, 96, 80])
+                        dest="vol_shape", default=[80, 32, 80])
     parser.add_argument("--lr", type=float,
                         dest="lr", default=0.0001, help="learning rate")
     parser.add_argument("--beta1", type=float,
@@ -224,10 +242,18 @@ if __name__ == "__main__":
     parser.add_argument("--loss_weights", type=float, nargs="+",
                         default=[1.0], help="loss weights")
     parser.add_argument("--loss_fn", type=str, default="mean_absolute_error",
-                        dest="loss_fn", help="loss function, must be a keras loss fn")
+                        dest="loss_fn", help="keras loss function name")
+    parser.add_argument("--split_col", type=str,
+                        dest="split_col", default='split')
+    parser.add_argument("--split_train", type=str, nargs="+",
+                        dest="split_train", default=['train'])
+    parser.add_argument("--split_eval", type=str, nargs="+",
+                        dest="split_eval", default=['eval'])
+
     parser.add_argument("--batchnorm", dest="batchnorm", action="store_true")
     parser.add_argument("--maxpool", dest="maxpool", action="store_true")
-    parser.set_defaults(batchnorm=False, maxpool=False)
+    parser.add_argument("--sample_eval", dest="sample_eval", action="store_true")
+    parser.set_defaults(batchnorm=False, maxpool=False, sample_eval=False)
 
     args = parser.parse_args()
     train(**vars(args))

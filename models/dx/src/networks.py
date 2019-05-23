@@ -35,19 +35,22 @@ def classifier_net(vol_shape, layers, batchnorm=False, leaky=0.0, maxpool=False)
     
     inputs = [x]
 
-    for channels, strides in layers:
+    for i, (channels, strides) in enumerate(layers):
+
+        batchnorm_lr = batchnorm if i < len(layers) - 1 else False
+
         if maxpool:
-            x = conv_block(x, channels, batchnorm=batchnorm, leaky=leaky)
-            print(K.int_shape(x))
+            x = conv_block(x, channels, batchnorm=batchnorm_lr, leaky=leaky)
+            print(K.int_shape(x), 'bn' if batchnorm_lr else '')
             if strides > 1:
                 x = maxpool_block(x, strides=strides, pool_size=strides)
         else:
-            x = conv_block(x, channels, strides, batchnorm=batchnorm, leaky=leaky)
-            print(K.int_shape(x))
+            x = conv_block(x, channels, strides, batchnorm=batchnorm_lr, leaky=leaky)
+            print(K.int_shape(x), 'bn' if batchnorm_lr else '')
 
     # add final (real) conv layer without batchnorm
-    x = conv_block(x, layers[-1][0], batchnorm=False, leaky=leaky)
-    print(K.int_shape(x))
+    #x = conv_block(x, layers[-1][0], batchnorm=False, leaky=leaky)
+    #print(K.int_shape(x))
  
     x = conv_block(x, 1, kernel_size=1, activation=False)
     print(K.int_shape(x))
@@ -58,10 +61,10 @@ def classifier_net(vol_shape, layers, batchnorm=False, leaky=0.0, maxpool=False)
     # weighted sum
     x = KL.Dense(2, use_bias=False)(x)
     print(K.int_shape(x))
-    
-    x = Softmax()(x)
+  
+    softmax = Softmax()(x)
 
-    outputs = [x]
+    outputs = [softmax]
  
     return Model(inputs=inputs, outputs=outputs)
 

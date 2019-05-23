@@ -37,7 +37,11 @@ def train(csv_path,
           image_sigma,
           enc_nf,
           dec_nf,
-          loss_weights):
+          vol_shape,
+          loss_weights,
+          split_col,
+          split_train,
+          split_eval):
     
     """
     model training function
@@ -52,12 +56,10 @@ def train(csv_path,
 
     model_config = locals()
     
-    vol_shape = (80, 96, 80)
-    
+    vol_shape = tuple(vol_shape)
+    model_config['vol_shape'] = vol_shape 
     print('input vol_shape is {}'.format(vol_shape))
-
-    model_config['vol_shape'] = vol_shape
-
+    
     assert os.path.isfile(csv_path), 'csv not found at {}'.format(csv_path)
 
     model_dir = './runs/'
@@ -122,7 +124,7 @@ def train(csv_path,
     csv = pd.read_csv(csv_path)
 
     img_keys = ['img_path_0', 'img_path_1']
-    lbl_keys = ['delta_t']
+    lbl_keys = ['delta_t', 'pat_dx_1']
 
     max_delta = csv['delta_t'].max()
 
@@ -130,22 +132,21 @@ def train(csv_path,
 
     train_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, split='train')
+                            sample=True, weights='weight',
+                            split=(split_col, split_train))
 
     valid_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, split='eval')
-
+                            sample=True, split=(split_col, split_eval))
+    
     board_csv_gen = datagenerators.csv_gen(csv_path, img_keys=img_keys,
                             lbl_keys=lbl_keys, batch_size=batch_size,
-                            sample=True, split='eval')
+                            sample=True, weights='weight',
+                            split=(split_col, split_eval))
 
-    kl_dummy = np.zeros((batch_size, *flow_shape, len(vol_shape)-1))
-
-    # convert delta and prepare for fit method
-    train_data = datagenerators.vae_gen(train_csv_gen, max_delta, int_steps, kl_dummy)
-    valid_data = datagenerators.vae_gen(valid_csv_gen, max_delta, int_steps, kl_dummy)
-    board_data = datagenerators.vae_gen(board_csv_gen, max_delta, int_steps, kl_dummy)
+    train_data = datagenerators.vae_generator(train_csv_gen, flow_shape, max_delta, int_steps)
+    valid_data = datagenerators.vae_generator(valid_csv_gen, flow_shape, max_delta, int_steps)
+    board_data = datagenerators.vae_generator(board_csv_gen, flow_shape, max_delta, int_steps)
    
     # write model_config
     config_path = os.path.join(model_dir, 'config.pkl')
@@ -205,6 +206,8 @@ if __name__ == "__main__":
     parser.add_argument("--image_sigma", type=float,
                         dest="image_sigma", default=0.01,
                         help="image noise parameter")
+    parser.add_argument("--vol_shape", type=int, nargs="+",
+                        dest="vol_shape", default=[80, 32, 80])
     parser.add_argument("--enc_nf", type=int, nargs="+",
                         dest="enc_nf", default=[16, 32, 32, 32])
     parser.add_argument("--dec_nf", type=int, nargs="+",
@@ -217,6 +220,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int,
                         dest="batch_size", default=4,
                         help="batch_size")
-
+    parser.add_argument("--split_col", type=str,
+                        dest="split_col", default="split")
+    parser.add_argument("--split_train", type=str, nargs="+",
+                        dest="split_train", default=['train'])
+    parser.add_argument("--split_eval", type=str, nargs="+",
+                        dest="split_eval", default=['eval'])
+    
     args = parser.parse_args()
     train(**vars(args))

@@ -81,22 +81,28 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
     gen_loss_weights = model_config['gen_loss_weights']
     int_steps = model_config['int_steps']
     reg_model_file = model_config['reg_model_file']
+    clf_model_file = model_config['clf_model_file']
     batchnorm = model_config['batchnorm']
     leaky = model_config['leaky']
 
     flow_shape = tuple(int(d * vel_resize) for d in vol_shape)
 
+    use_reg = reg_model_file is not None
+    use_clf = clf_model_file is not None
+
     csv = pd.DataFrame()
     csv['delta_t'] = np.arange(start, stop, step) * 365
-    csv['img_path'] = img_path
+    csv['img_path_0'] = img_path
+    csv['img_path_1'] = img_path
     csv['img_id'] = img_id
+    csv['pat_dx_1'] = 0 # dummy
 
     # write meta to out_dir
     csv_out_path = os.path.join(out_dir, 'meta.csv')
     csv.to_csv(csv_out_path, index=False)
 
-    img_keys = ['img_path']
-    lbl_keys = ['delta_t', 'img_id']
+    img_keys = ['img_path_0', 'img_path_1']
+    lbl_keys = ['delta_t', 'pat_dx_1', 'img_id']
  
     # datagenerator (from meta in out_dir!) 
     test_csv_data = datagenerators.csv_gen(csv_out_path, img_keys=img_keys,
@@ -104,7 +110,11 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                                     split=None, n_epochs=1, sample=False,
                                     shuffle=False)
 
-    test_data = datagenerators.gan_gen(test_csv_data, max_delta, int_steps)
+    _, gen_test_data = datagenerators.gan_generators(csv_gen=test_csv_data,
+                                    batch_size=batch_size, vol_shape=vol_shape,
+                                    flow_shape=flow_shape, max_delta=max_delta,
+                                    int_steps=int_steps, use_reg=use_reg,
+                                    use_clf=use_clf)
 
     with tf.device(gpu):
 
@@ -122,6 +132,7 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                                          vel_resize=vel_resize,
                                          int_steps=int_steps,
                                          reg_model_file=reg_model_file,
+                                         clf_model_file=clf_model_file,
                                          batchnorm=batchnorm,
                                          leaky=leaky)
 
@@ -131,21 +142,23 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
         print('starting predict')
 
         # predict
-        for i, (imgs, lbls) in enumerate(test_data):
+        for i, (inputs, _, batch) in enumerate(gen_test_data):
 
             if i % 10 == 0:
                 print('step', i)
 
             # generate
-            Df, delta_f, yf, flow_params, flow, features = gen_net.predict([imgs[0], imgs[0], lbls[1]])
+            pred_out = gen_net.predict(inputs)[:6]
+            Df, yf, flow_params, _, flow, features = pred_out
 
-            img_ids = lbls[3]
-            deltas = lbls[0] * max_delta / 365
+            img_ids = batch['img_id']
+            deltas = batch['delta_t'] * max_delta / 365
+            #deltas = lbls[0] * max_delta / 365
 
             for i in range(batch_size):
 
                 img_id = img_ids[i][0]
-                delta = deltas[i]
+                delta = deltas[i][0]
 
                 img_name = str(img_id) + '_{img_type}_'
                 img_name += '{:04.1f}.nii.gz'.format(round(delta, 1))
@@ -161,12 +174,13 @@ def predict(gpu_id, img_path, out_dir, batch_size, gen_model_file, start, stop, 
                 if 'yf' in out_imgs: 
                     _save_nii(yf[i], 'yf')
                 
+                if 'flow_params' in out_imgs: 
+                    _save_nii(flow_params[i], 'flow_params')
+
                 if 'flow' in out_imgs: 
                     _save_nii(flow[i], 'flow')
 
                 csv.loc[csv.img_id == img_id, 'Df'] = Df[i]
-                csv.loc[csv.img_id == img_id, 'delta_f'] = delta_f[i]
-        
         
         csv.to_csv(csv_out_path, index=False)
 
