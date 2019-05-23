@@ -1,0 +1,30 @@
+\usetikzlibrary{positioning}
+
+\begin{tikzpicture}
+
+	\coordinate (ref) at (0, 0);
+
+	\node[below = 0.1 of ref] (nn) {\includegraphics[width=\textwidth]{images/toydata/no_noise_no_sparse}};
+
+	\node[below = 0.1 of nn] (lnn) {no noise, no sparseness penalty};
+	
+	\node[below = 0.2 of lnn] (ny) {\includegraphics[width=\textwidth]{images/toydata/no_noise_sparse}};
+
+	\node[below = 0.1 of ny] (lny) {no noise, with sparseness penalty};
+	
+	\node[below = 0.2 of lny] (yy) {\includegraphics[width=\textwidth]{images/toydata/noise_sparse}};
+
+	\node[below = 0.1 of yy] (lyy) {noise, with sparseness penalty};
+
+	\node[above right = 0.05 and 0.7 of nn.north west] (x) {$x\vphantom{\norm{v}_2}$};
+	\node[right = 1.6 of x.west] (y)	{$y\vphantom{\norm{v}_2}$};
+	\node[right = 1.6 of y.west] (yhat)	{$\hat y\vphantom{\norm{v}_2}$};
+	\node[right = 0.9 of yhat.west] (t)	{$t\vphantom{\norm{v}_2}$};
+	\node[right = 0.9 of t.west] (v)	{$v\vphantom{\norm{v}_2}$};
+	\node[right = 1.4 of v.west] (mag)	{$\norm{v}_2$};
+	\node[right = 1.8 of mag.west] (vx)	{$v_x\vphantom{\norm{v}_2}$};
+	\node[right = 1.6 of vx.west] (vy)	{$v_y\vphantom{\norm{v}_2}$};
+	\node[right = 1.6 of vy.west] (vz)	{$v_z\vphantom{\norm{v}_2}$};
+
+
+\end{tikzpicture}
