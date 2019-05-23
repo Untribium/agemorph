@@ -182,16 +182,15 @@ Note that we choose not to scale the similarity loss with respect to time step $
 \begin{figure}[h]
 	\centering
 	\begin{subfigure}{0.48\textwidth}
-		\includegraphics[width=0.9\linewidth, trim={10 30 30 30}, clip]{images/l1_diff_plots/brains} 
+		\includegraphics[width=\linewidth, trim={10 30 30 30}, clip]{images/l1_diff_plots/brains} 
 		\caption{full-size}
 	\end{subfigure}
 	\begin{subfigure}{0.48\textwidth}
-		\includegraphics[width=0.9\linewidth, trim={10 30 30 30}, clip]{images/l1_diff_plots/slice.pdf}
+		\includegraphics[width=\linewidth, trim={10 30 30 30}, clip]{images/l1_diff_plots/slice.pdf}
 		\caption{cropped}
 	\end{subfigure}
 	 
 	\caption{$L_1$ difference between image pairs $(x, y)$ from our data set for both the full-size and the cropped scans. While the difference increases with $t$, it does so rather slowly with slopes of 0.007 and 0.011 respectively.}
-	%TODO(explain colors, is age when image taken)
 	\label{fig:l1plots}
 \end{figure}
 
