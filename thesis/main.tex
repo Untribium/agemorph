@@ -637,6 +637,7 @@ Note that we do not perform any hyperparameter tuning which might result in a si
 To validate our modifications to the architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:datsynth}. Visual inspection of the results, presented in \autoref{fig:toydata} confirms the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data samples.
 
 \begin{figure}
+	%TODO(maybe flip time bar(
 	\centering
 	\input{tikz/toydata}
 	\vspace*{-15pt}
@@ -694,7 +695,7 @@ Note that for the training of the regressor as well as the classifier used as lo
 The model is trained using the Adam optimizer with $\alpha = 0.0001$, $\beta_1 = 0.0$, $\beta_2 = 0.9$ and $\epsilon = 10^{-7}$. Limited by GPU memory, we use batch size of 8 and train the models for a varying number of steps depending on the configuration. Following the training procedure in \cite{goodfellow2014generative}, we alternate between training the critic and the generator on five and one batches respectively. Each such training step runs in roughly 5 seconds per batch or 0.6 seconds per sample.
 
 \subsubsection*{Follow-Up Prediction}
-Our first experiment is to predict follow-up images using the actual time steps in our pairs data set and we evaluate the performance on this task on configurations 1 and 2.
+As our first experiment, we use our model to predict follow-up images using the actual time steps in our pairs data set and evaluate the performance on this task on configurations 1 and 2.
 We visually inspect the results
 compare predicted time step
 
@@ -759,7 +760,7 @@ magnitude of flow differs (maybe numbers, but the finding is qualitative)
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_141445}
 	\vspace*{-15pt}
 	\caption{The center column consists of a series of real images from a \textbf{subject diagnosed with Alzheimer's Disease}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
-	\label{fig:hcad_ad}
+	\label{fig:hcad_ad} %TODO(tikz labels)
 \end{figure}
 
 \begin{figure}
@@ -767,7 +768,7 @@ magnitude of flow differs (maybe numbers, but the finding is qualitative)
 	\includegraphics[width=\linewidth, trim={100 100 66 30}, clip]{images/HC_AD_plots/comp_ADNI_137014}
 	\vspace*{-15pt}
 	\caption{The center column consists of a series of real images from a \textbf{healthy subject}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
-	\label{fig:hcad_hc}
+	\label{fig:hcad_hc} %TODO(tikz labels)
 \end{figure}
 
 %TODO(mean flow plots)
@@ -800,16 +801,27 @@ magnitude of flow differs (maybe numbers, but the finding is qualitative)
 % ADNI_260	9	1.5			ADNI_172291	not really, skull, workable if need be
 
 \subsubsection*{Long-Term Prediction}
-As mentioned in \autoref{sec:adalongterm}, our model architecture allows generating images for very large time steps, such as 50 years, at reasonable computational cost. However, while the velocity field predicted by the generator is time-invariant in theory, its accuracy is highly dependent on the distribution of time steps occuring in the training data. In practice, using time steps around and beyond the maximum step in the training data very quickly result in unrealistic looking outputs. We generate images at time steps of $t \in \{2, 4, 6, 8, 10, 20\}$ years for a random sample using configuration 1 and present the results in \autoref{fig:explongterm}.
+As mentioned in \autoref{sec:adalongterm}, our model architecture allows generating images for very large time steps, such as 50 years, at reasonable computational cost. However, while the velocity field predicted by the generator is time-invariant in theory, its accuracy is highly dependent on the distribution of time steps occuring in the training data. In practice, using time steps around and beyond the maximum step in the training data very quickly result in unrealistic looking outputs. We generate images at time steps of $t \in \{2, 4, 6, 8, 10\}$ years for a random sample using configuration 1 and present the results in \autoref{fig:explongterm}.
 Superior results could likely be obtained by using an iterative approach similar to \cite{wegmayr}, using multiple smaller time steps in sequence. TODO(fig)
+
+\begin{figure}
+	\centering
+	\includegraphics[width=0.9\linewidth, trim={70 70 50 100}, clip]{images/age_plots/longterm_diff}
+	\vspace*{-15pt}
+	\caption{Sequence of base image and generated images for time steps of 2, 4, 6, 8 and 10 years, as well as the corresponding difference maps to the base image. We pick two samples which represent common outcomes in our data sets.}
+	\label{fig:hcad_ad} %TODO(tikz labels)
+\end{figure}
 
 \subsubsection*{Conversion Prediction}
 As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model and use a diagnosis classifier to predict $p_{AD}(G(x))$ and use thresholding to predict whether the subject is progressive or stable.
 
 Keeping in mind the imbalanced nature of the conversion data set, we use the following two metrics
-
 \begin{equation}
-	\text{F}_1 = 2\ \bigg(\frac{TP}{TP + FP} + \frac{TP}{TP + FN}\bigg)
+	\begin{split}
+		\text{precision} =& \ \frac{TP}{TP + FP} \\[8pt]
+		\text{recall} =& \ \frac{TP}{TP + FN} \\[8pt]
+		\text{F}_1 =&\ 2\ \bigg(\frac{\text{precision} \cdot \text{recall}}{\text{precision} + \text{recall}}\bigg)
+	\end{split}
 \end{equation}
 
 \begin{equation}

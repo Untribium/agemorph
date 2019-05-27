@@ -10,16 +10,15 @@ The past decades have seen medical research advancing at a rapid rate, resulting
 
 Generative models, most prominently Variational Autoencoders (VAEs) \cite{kingma2013auto} and Generative Adversarial Networks (GANs) \cite{goodfellow2014generative}, have been successfully applied to model gradual changes in image data for wide range of settings such as face aging \cite{palsson2018generative}, image registration \cite{balakrishnan2019voxelmorph} and style transfer \cite{zhu2017unpaired}. The goal of this thesis is to apply some of these methods to the problem of brain aging. Specifically, we consider a model which given a T1-weighted MRI image $x$ taken at time $t_0$ aims to predict an image $y$ at some time $t_1$ in the future. If sufficiently accurate, such a model could pave the way for a number of applications. For instance, existing diagnostic tools which operate on MRI data such as diagnosis classifiers can be applied directly to the generated image, therefore leveraging decades of research in the field. Furthermore, insights into the aging process and the effects of degenerative diseases can be gained by aggregating the model's outputs over different groups of subjects.
 
-Validating generative model outputs beyond subjective visual inspection is a notoriously difficult task. 
-Meaningful metric
-
 In the field of medical imaging, diffeomorphic deformations are popularly used to model biological processes \cite{beg2005computing} \cite{ashburner2007fast}. Unlike entirely convolutional models, diffeomorphisms are constrained to transformations which are differentiable and invertible and therefore topology preserving, thus generally resulting in a more realistic representation while also producing more interpretable results. Following \cite{dalca2018unsupervised}, we model the brain aging process as a diffeomorphic deformation field obtained by numerically integrating a stationary velocity field using the \textit{scaling and squaring} method \cite{arsigny2006log}. We furter propose an extending the method to yield deformations for arbitrary time steps, allowing our brain aging model to generate and be trained on image pairs with arbitrary time differences. 
+
+Finally, validating generative model outputs beyond subjective visual inspection is a notoriously difficult task. While user studies can be employed in some domains such as face aging \cite{palsson2018generative}, this is not a viable option for the task of brain aging. Instead, we propose to use a pre-trained age regressor applied to our generator's outputs to gain a meaningful metric. TODO fix entire paragraph
 
 Our main contributions are:
 
 \begin{itemize}
 	\item we model the brain aging process using diffeomorphic deformations%, adapting the architecture proposed by \cite{dalca2018unsupervised}
 	\item we propose an extension to the scaling and squaring method for arbitrary timesteps
-	\item we validate our model's ability to predict follow-up images
+	\item we validate our model's ability to predict follow-up images using a pre-trained age regressor
 	\item we use our model to predict the Alzheimer's Disease conversion probability of patients with Mild Cognitive Impairment
 \end{itemize}
