@@ -269,6 +269,7 @@ Conversely, a case is considered \textit{stable} if its diagnosis does not chang
 Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ and use this prediction to estimate the probability of a conversion occuring.
 
 \section{Long-Term Prediction}
+\label{sec:adalongterm}
 Another interesting application is to generate predictions for larger time steps. While we don't expect the model's predictions to be particulary accurate in this setting, especially for time steps $t \gg 1$, i.e. time steps significantly exceeding the maximum time step occuring in training data, long-term predictions can be helpful in highlighting areas of significant change as well as in visualizing how the aging process of a healthy brain differs from that of a brain affected by AD. Since every additional squaring layer doubles the maximum time step $t$ for which we can generate an image, our model can produce outputs for very large steps at little additional computational cost.
 
 \section{Feature Attribution}
@@ -278,7 +279,8 @@ Moreover, our model is probabilistic which allows us to produce multiple differe
 
 \chapter{Data}
 
-\section{Synthetic Data} \label{sec:synth}
+\section{Synthetic Data}
+\label{sec:datsynth}
 In order to validate our architecture, we first train and evaluate our model on a synthetic data set designed to yield easily interpretable results while still being similar in structure to the preprocessed brain data.
 
 Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images, containing a spherical shell with a value of $-1$ on its shell and $1$ in its interior. We randomize both the sphere's radius and position within the image, and sample $t_i \sim \mathcal{U}(0, 1)$, the time step between $x_i$ and $y_i$. The shell's thickness decreases from $x_i$ to $y_i$, where the thickness in $y_i$ is defined as $d_{y_i} = (1-t) d_x$, with $d_x$ identical for all $x_i$. We explore two different backgrounds, a constant value of 0 as well as smoothed gaussian noise identical for $x_i$ and $y_i$ as shown in \autoref{fig:toydata}.
@@ -586,6 +588,7 @@ Given that the age regressor is exclusively utilized to estimate relative age di
 \end{comment}
 
 \section{Diagnosis Classifier}
+\label{sec:expdxclf}
 We pre-train a diagnosis classifier to discriminate between images labeled as MCI and AD respectively. Given the gradual transition between the two diagnoses, we use the \textit{MCI/AD Set} described in \autoref{sec:datmciad}, which limits our training and validation sets to a subset of images for which we have increased confidence in the diagnosis labels. Note that we exclude all subjects in the healthy control group HC and use a binary classifier focussing on the more subtle distinctions between the effects of MCI and AD.
 
 The classifier is implemented as a 3D CNN identical in structure to the age regressor. Softmax cross entropy is used as the objective function and minimizes using the Adam optimizer with $\alpha = 0.0001, \beta_1 = 0.9, \beta_2 = 0.999$ and $\epsilon = 0.01$ for increased training stability.
@@ -593,26 +596,32 @@ We perform cross validation using the 5-fold data split. Due to high variance in
 
 \begin{table}[h]
 	\begin{center}
-		\begin{tabular}{c c c c c}
+		\begin{tabular}{c c c c c c c c c c c}
 			\toprule
 			\multirow{2}{*}{Split} & 
-			\multicolumn{2}{c}{accuracy} & 
-			\multicolumn{2}{c}{$\text{F}_1$-Score} \\
+			\multicolumn{2}{c}{Run 1} & 
+			\multicolumn{2}{c}{2} & 
+			\multicolumn{2}{c}{3} & 
+			\multicolumn{2}{c}{4} & 
+			\multicolumn{2}{c}{5} \\
 			\cmidrule(lr){2-3}
 			\cmidrule(lr){4-5}
-			 & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ \\ 
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
+			\cmidrule(lr){10-11}
+			 & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ \\ 
 			%------
-			\cmidrule(lr){1-5}
-			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 \\
-			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.86 & 2.97 \\
-			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 \\
-			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 \\
-			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 \\
-			\cmidrule(lr){1-5}
-			                & 3.86 & 3.05 & 3.90 & 3.02 \\
+			\cmidrule(lr){1-11}
+			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 & & & & & & \\
+			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.86 & 2.97 & & & & & & \\
+			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 & & & & & & \\
+			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 & & & & & & \\
+			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 & & & & & & \\
+			%\cmidrule(lr){1-11}
+			%                & 3.86 & 3.05 & 3.90 & 3.02 & & & & & & \\
 			\bottomrule
 		\end{tabular}
-		\caption{Cross validated mean and standard deviation of the absolute error for the age regressor model, comparing absolute and squared loss objectives.}
+		\caption{Cross validated accuracy and $\text{F}_1$-score of our classifier models.}
 		\label{tab:clfcrossval}
 	\end{center}
 \end{table}
@@ -625,7 +634,7 @@ To establish a baseline, we first train a variation of the Voxelmorph architectu
 Note that we do not perform any hyperparameter tuning which might result in a significant improvement in performance.
 
 \subsection{Synthetic Data}
-To validate our modifications to the architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:synth}. Visual inspection of the results, presented in \autoref{fig:toydata} confirms the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data samples.
+To validate our modifications to the architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:datsynth}. Visual inspection of the results, presented in \autoref{fig:toydata} confirms the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data samples.
 
 \begin{figure}
 	\centering
@@ -691,11 +700,11 @@ compare predicted time step
 
 TODO(show example)
 
-\begin{figure}
+\begin{figure}[p]
 	\centering
 	\includegraphics[width=.7\linewidth]{images/age_plots/d_dhat_fake}
 	\vspace*{-15pt}
-	\caption{Age regressor estimates on 2651 validation samples $(x, \hat y)$ with $ \hat y = G(x) $ from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.03 and a slope of 0.61. TODO Compare to figure with real diffs.}
+	\caption{Age regressor estimates on 2651 validation samples $(x, \hat y)$ with $ \hat y = G(x) $ from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of X.XX and a slope of X.XX. Note that these results should be compared to the results on the real data in \autoref{fig:regddhatreal}.}
 	\label{fig:regddhatfake}
 \end{figure}
 
@@ -791,15 +800,41 @@ magnitude of flow differs (maybe numbers, but the finding is qualitative)
 % ADNI_260	9	1.5			ADNI_172291	not really, skull, workable if need be
 
 \subsubsection*{Long-Term Prediction}
-Some plots long term, doesn't work very well because we are using deformations, might better using a hybrid iterarive approach like wegmayr
+As mentioned in \autoref{sec:adalongterm}, our model architecture allows generating images for very large time steps, such as 50 years, at reasonable computational cost. However, while the velocity field predicted by the generator is time-invariant in theory, its accuracy is highly dependent on the distribution of time steps occuring in the training data. In practice, using time steps around and beyond the maximum step in the training data very quickly result in unrealistic looking outputs. We generate images at time steps of $t \in \{2, 4, 6, 8, 10, 20\}$ years for a random sample using configuration 1 and present the results in \autoref{fig:explongterm}.
+Superior results could likely be obtained by using an iterative approach similar to \cite{wegmayr}, using multiple smaller time steps in sequence. TODO(fig)
 
 \subsubsection*{Conversion Prediction}
-5x classifier, from cross val
-5x threshold each
-xr = baseline
-yr = upper bound
+As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model and use a diagnosis classifier to predict $p_{AD}(G(x))$ and use thresholding to predict whether the subject is progressive or stable.
 
-F1 score, accuracy
+Keeping in mind the imbalanced nature of the conversion data set, we use the following two metrics
+
+\begin{equation}
+	\text{F}_1 = 2\ \bigg(\frac{TP}{TP + FP} + \frac{TP}{TP + FN}\bigg)
+\end{equation}
+
+\begin{equation}
+	acc = \frac{1}{2}\ \bigg(\frac{TP}{TP + FN} + \frac{TN}{TN + FP}\bigg)
+\end{equation}
+
+where $TP$ = true positives, $TN$ = true negatives, $FP$ = false positives and $FN$~=~false negatives.
+
+Given a set of images $\{x\}$ from our conversion data set, we calculate the balanced conversion accuracy and the $\text{F}_1$-score as follows:
+\begin{enumerate}
+	\item We use a diagnosis classifier to predict the probabilities $p_{AD}(x)$ for each $x$
+	\item We split the conversion data set into 5 balanced splits $\{\mathcal{T}_i\}_{i\ \in\ 0\ ..\ 4}$ and calculate $t_i$ for each split as the threshold which maximizes the target metric on $\{\mathcal{T}_j\}_{i \neq j}$.
+	\item We calculate the metrics for each split $\mathcal{T}_i$ using the corresponding $t_i$ and take the mean over all splits
+	\item We repeat steps 2 and 3 five times and take the mean for both metrics
+	\item We repeat steps 1 to 4 for each of the five best classifier in \autoref{tab:clfcrossval} and again take the mean
+\end{enumerate}
+
+We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for our generated images $G(x)$ for TODO(which runs) and compare the results in TODO(table).
+
+%5x classifier, from cross val
+%5x threshold each
+%xr = baseline
+%yr = upper bound
+
+%F1 score, accuracy
 
 \chapter{Related Work}
 Most similar to our work in terms of the problem setting, \cite{wegmayr} use a WGAN architecture to model the brain's aging process. They propose a UNet-derived model architecture based on \cite{baumgartner2018visual}, which is trained and applied iteratively to obtain predictions for different time steps. In addition to modeling the differences in the aging process between healthy subjects and subjects affected by Alzheimer's Disease, they report cautiously positive results for the task of conversion prediction.
