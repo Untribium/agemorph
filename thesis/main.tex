@@ -69,15 +69,15 @@ and approximated by minimizing the KL divergence
 The complete loss function can be separated into three terms denoted as follows
 \begin{equation} \label{eq:voxloss}
 	\begin{split}
-		\mathcal{L}(\psi; \mathbf{x}, \mathbf{y})
-		& = -\E_{q}[ \log p( \mathbf{x} | \mathbf{z}; \mathbf{y} ) ]
-		+ \text{KL} [ q_{\psi} ( \mathbf{z} | \mathbf{x} ; \mathbf{y} ) || p ( \mathbf{z} ) ] \\[12pt]
+		\mathcal{L}(\psi; x, y)
+		& = -\E_{q}[ \log p( x | z; y ) ]
+		+ \text{KL} [ q_{\psi} ( z | x ; y ) || p ( z ) ] \\[12pt]
 		& = \underbrace{
-			\frac{1}{2 \sigma^2} \norm{\mathbf{y} - \mathbf{x} \circ \Phi_{z}}^{2} \vphantom{\frac{1}{2_{2_2}}}
+			\frac{1}{2 \sigma^2} \norm{y - x \circ \Phi_{z}}^{2} \vphantom{\frac{1}{2_{2_2}}}
 		}_{\text{reconstruction term}} \\[6pt]
 		& + \frac{1}{2} \bigg[
 		\underbrace{
-			tr( \lambda \mathbf{D} \Sigma_{z | x; y} - \log \abs{ \Sigma_{z | x; y} } ) \vphantom{\mu_{z | x; y}^{T}}
+			tr( \lambda D \Sigma_{z | x; y} - \log \abs{ \Sigma_{z | x; y} } ) \vphantom{\mu_{z | x; y}^{T}}
 		}_{\text{sigma term}} +
 		\underbrace{
 			\mu_{z | x; y}^{T} \Lambda_{z} \mu_{z | x; y}
@@ -612,11 +612,11 @@ We perform cross validation using the 5-fold data split. Due to high variance in
 			 & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ & acc & $\text{F}_1$ \\ 
 			%------
 			\cmidrule(lr){1-11}
-			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 & & & & & & \\
-			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.86 & 2.97 & & & & & & \\
-			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 & & & & & & \\
-			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 & & & & & & \\
-			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 & & & & & & \\
+			$\mathcal{S}_0$ & 68.58 & 66.76 & 69.08 & 66.76 & \textbf{70.74} & \textbf{69.50} & 67.81 & 65.39 & 63.74 & 63.51 \\
+			$\mathcal{S}_1$ & \textbf{70.32} & \textbf{72.07} & 66.13 & 68.13 & 68.10 & 70.26 & 69.95 & 72.01 & 70.07 & 71.84 \\
+			$\mathcal{S}_2$ & 67.33 & 70.24 & 67.56 & 69.58 & 65.33 & 67.97 & \textbf{67.78} & \textbf{69.79} & 64.89 & 67.76 \\
+			$\mathcal{S}_3$ & \textbf{71.68} & \textbf{71.03} & 70.14 & 69.86 & 70.26 & 69.94 & 68.13 & 67.31 & 70.50 & 68.52 \\
+			$\mathcal{S}_4$ & 66.71 & 67.60 & 66.58 & 67.59 & \textbf{69.97} & \textbf{70.59} & 68.15 & 68.56 & 64.88 & 64.28 \\
 			%\cmidrule(lr){1-11}
 			%                & 3.86 & 3.05 & 3.90 & 3.02 & & & & & & \\
 			\bottomrule
@@ -624,7 +624,7 @@ We perform cross validation using the 5-fold data split. Due to high variance in
 		\caption{Cross validated accuracy and $\text{F}_1$-score of our classifier models.}
 		\label{tab:clfcrossval}
 	\end{center}
-\end{table}
+\end{table} %TODO(too wide)
 
 \section{Diffeomorphic Models}
 

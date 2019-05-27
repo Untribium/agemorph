@@ -1,11 +1,7 @@
 \begin{abstract}
 Average human life expectancy has increased dramatically over the last century, leading to a significant rise in the prevalence of aging-related neurodegenerative diseases. Alzheimer's Disease in particular is one of the only leading causes of death still on the rise. As such, advancing our understanding of the brain aging process as well as early stage detection of Alzheimer's Disease onset is a important area of research.
-
-
-In our work, we focus on modeling the brain aging process on Magnetic Resonance Imaging (MRI) scans. To that end, we express the aging process as a diffeomorphic deformation and introduce a conditional Generative Adversarial Network (GAN) architecture to predict the future state of a brain. Specifically, the model learns a stationary velocity field which is integrated using the scaling and squaring method, for which we propose an extension to handle arbitrary time steps both in training and inference.
-
-
-We validate our model's performance using a pre-trained age regressor on its outputs and predict the probabilty of patients with Mild Cognitive Impairment converting to Alzheimer's Disease.
+In our work, we focus on modeling the brain aging process on Magnetic Resonance Imaging (MRI) scans. To that end, we express the aging process as a diffeomorphic deformation and introduce a conditional Generative Adversarial Network (GAN) architecture to predict the future state of a brain. Specifically, our model learns a stationary velocity field which is subsequently integrated using the scaling and squaring method, for which we propose an extension to handle arbitrary time steps both in training and inference.
+Beyond visual inspection, we validate our model's performance by applying a pre-trained age regressor to the generated outputs. Furthermore, we use our model to predict the probabilty of patients with Mild Cognitive Impairment converting to Alzheimer's Disease.
 
 \end{abstract}
 
