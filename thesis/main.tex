@@ -276,7 +276,7 @@ Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ a
 Another interesting application is to generate predictions for larger time steps. While we don't expect the model's predictions to be particulary accurate in this setting, especially for time steps $t \gg 1$, i.e. time steps significantly exceeding the maximum time step occuring in training phase, long-term predictions can be helpful in highlighting areas of significant change as well as in visualizing how the aging process of a healthy brain differs from that of a brain affected by AD. Since every additional squaring layer doubles the maximum time step $t$ for which we can generate an image, our model can produce outputs for very large steps at little additional computational cost.
 
 \section{Feature Attribution}
-Finally, similar to \cite{baumgartner2018visual}, our generator has potential applications in the area of visual feature attribution, that is, highlighting the parts of an image which are most strongly correlated to one of its labels, e.g. the subject's diagnosis TODO(can we say this? Does this make sense?).
+Finally, similar to \cite{baumgartner2018visual}, our generator has potential applications in the area of visual feature attribution, that is, highlighting the parts of an image which are most strongly correlated to one of its labels, e.g. the subject's diagnosis.
 For instance, by training the model on different subsets of our data, such as exclusively AD or HC cases, we can model the different progressions and visualize their effects either on a single image or aggregated over subsets of our data.
 Finally, since our model is probabilistic, multiple different predictions for the same input image $x$ can be generated, which helps in getting an understanding of our model's uncertainty.
 
@@ -522,7 +522,8 @@ Finally, as the name implies, the \textit{Leave One Visit Out Set} is formed by 
 
 \chapter{Experiments}
 
-\section{Age Regressor} \label{sec:expreg}
+\section{Age Regressor}
+\label{sec:expreg}
 Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also obtain an estimation of the age label, and by extension the time step, by applying a pre-trained age regressor to our model's outputs. Furthermore, the regressor is also included in the generator loss function as described in \autoref{sec:adaagereg}. Given its importance in the validation of our generative model, we evaluate the regressor's performance on a number of different tasks.
 
 The regressor is implemented as a 3D CNN with nine layers of which eight use batch normalization, and trained using the Adam optimizer with $\alpha = 0.001, \beta_1 = 0.9, \beta_2 = 0.999 $ and $ \epsilon = 0.0001 $.
@@ -585,16 +586,16 @@ Note that since we are performing these experiments on real image pairs, the res
 			\cmidrule(lr){4-5}
 			\cmidrule(lr){6-7}
 			\cmidrule(lr){8-9}
-			 & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ \\ 
+			 & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ \\ 
 			%------
 			\cmidrule(lr){1-9}
-			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 \\
-			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.86 & 2.97 \\
-			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 \\
-			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 \\
-			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 \\
+			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 & 1.37 & 1.65 & 1.32 & 1.53 \\
+			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.87 & 2.97 & 1.20 & 1.55 & 1.09 & 1.55 \\
+			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 & 1.30 & 1.58 & 1.29 & 1.51 \\
+			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 & 1.36 & 1.55 & 1.33 & 1.60 \\
+			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 & 1.37 & 1.72 & 1.35 & 1.62 \\
 			\cmidrule(lr){1-9}
-			                & 3.86 & 3.05 & 3.90 & 3.02 \\
+					& 3.86 & 3.05 & 3.90 & 3.02 & 1.32 & 1.61 & 1.28 & 1.56 \\
 			\bottomrule
 		\end{tabular}
 		\caption{Cross validated mean and standard deviation of our age regressor model on the tasks of predicting the age label of a single image as well as estimating the age difference for a pair of images. We also compare models trained using absolute and squared loss objectives.}
@@ -725,8 +726,7 @@ The model is trained using the Adam optimizer with $\alpha = 0.0001$, $\beta_1 =
 \end{figure}
 
 \subsubsection*{Follow-Up Prediction}
-As our first experiment, we predict follow-up images using the actual time steps in the pairs data set. Using the pre-trained age regressor, we evaluate the performance on this task for configurations 1 and 2 and present the results in \autoref{fig:expfollowuprolling}.
-
+As our first experiment, we predict follow-up images using the actual time steps in the pairs data set. Using the pre-trained age regressor, we evaluate the performance on this task for configurations 1 and 2 and present the results in \autoref{fig:expfollowuprolling}. Both model configurations produce outputs that appear aged to the regressor, with mean absolute errors between the predicted and the actual time step of 1.28 and 1.20 years respectively. We further observe that configuration 2 displays a smaller rolling standard deviation in \autoref{fig:expfollowuprolling}, indicating higher confidence in its outputs.
 
 \begin{figure}[h]
 	\centering
@@ -743,10 +743,8 @@ As our first experiment, we predict follow-up images using the actual time steps
 	\label{fig:expfollowuprolling}
 \end{figure}
 
-TODO(show example)
-
 \subsubsection*{Fixed Time Step Prediction}
-To evaluate the model's ability to generate follow-up images at fixed time steps, we predict images at $t \in \{1, 2, 4, 6, 8\}$ years and estimate the age labels using the age regressor. The results for configurations 1 and 2 are presented in \autoref{tab:expfixed} and visualized in \autoref{fig:expfixedhist}. We run configuration 1 at 45'000 training steps, where the model converges, and configuration 2 at 15'000 steps where $\mathcal{L}_{age}$ is minimal on the validation data. Both configurations are capable of producing older looking images and the age regre
+To evaluate the model's ability to generate follow-up images at fixed time steps, we predict images at $t \in \{1, 2, 4, 6, 8\}$ years and estimate the corresponding age labels using the age regressor. The results for configurations 1 and 2 are presented in \autoref{tab:expfixed} and visualized in \autoref{fig:expfixedhist}. We observe that the time steps estimated on the generated images tend to be higher than the target time step $t$ for small $t$.
 
 \begin{table}[h]
 	\begin{center}
@@ -770,7 +768,7 @@ To evaluate the model's ability to generate follow-up images at fixed time steps
 			2 & 2.08 & 0.79 & 3.02 & 1.10 & 4.01 & 1.74 & 4.66 & 2.30 & 5.02 & 2.78 \\
 			\bottomrule
 		\end{tabular}
-		\caption{Mean and standard deviation of the estimated age labels on outputs generated for various different time steps.}
+		\caption{Mean and standard deviation of the estimated age labels on outputs generated for various different target time steps $t$.}
 		\label{tab:expfixed}
 	\end{center}
 \end{table}
@@ -791,7 +789,7 @@ To evaluate the model's ability to generate follow-up images at fixed time steps
 \end{figure}
 
 \subsubsection*{Feature Attribution}
-To visualize the differences in aging between healthy subjects and subjects affected by Alzheimer's Disease, we train configurations 5 and 6 on data sets which are correspondingly limited. We qualitatively and quantitatively observe higher mean deformation magnitudes for configuration 6 and visually compare the effects of the models applied to a healthy subject in \autoref{fig:expfeathc} and a subject affected by AD in \autoref{fig:expfeatad}.
+To visualize the differences in aging between healthy subjects and subjects affected by Alzheimer's Disease, we train configurations 5 and 6 on data sets which are accordingly limited to healthy and non-healthy subjects respectively. We qualitatively and quantitatively observe higher mean deformation magnitudes for configuration 6 and visually compare the effects of both models applied to a healthy subject in \autoref{fig:expfeathc} and a subject affected by AD in \autoref{fig:expfeatad}.
 
 \begin{figure}[h]
 	\centering
@@ -838,19 +836,19 @@ To visualize the differences in aging between healthy subjects and subjects affe
 
 \subsubsection*{Long-Term Prediction}
 \label{sec:explongterm}
-As mentioned in \autoref{sec:applongterm}, our model architecture allows generating images for very large time steps, such as 50 years, at reasonable computational cost. However, while the velocity field predicted by the generator is time-invariant in theory, its accuracy is highly dependent on the distribution of time steps occuring in the training data. In practice, using time steps around and beyond the maximum step in the training data very quickly result in unrealistic looking outputs. We generate images at time steps of $t \in \{2, 4, 6, 8, 10\}$ years for a random sample using configuration 1 and present the results in \autoref{fig:explongterm}.
-Superior results could likely be obtained by using an iterative approach similar to \cite{wegmayr2019generative}, using multiple smaller time steps in sequence. TODO(fig)
+As mentioned in \autoref{sec:applongterm}, our model architecture allows generating images for very large time steps, such as 50 years, at reasonable computational cost. However, while the velocity field predicted by the generator is time-invariant in theory, this property is only enforced within the range of time steps occuring in the training data. In practice, using time steps around and beyond the maximum step in the training data very quickly result in unrealistic looking outputs. We use configuration 1 to generate images at time steps of $t \in \{2, 4, 6, 8, 10\}$ years for two samples and present the resulting outputs in \autoref{fig:explongterm}.
+Superior results could likely be obtained by iteratively applying deformations for smaller time steps in an approach similar to that used in \cite{wegmayr2019generative}.
 
 \begin{figure}[h]
 	\centering
 	\input{tikz/longterm}
 	\vspace{-15pt}
 	\caption{Sequence of a base image $x$ and images generated for time steps of 2, 4, 6, 8 and 10 years, as well as the corresponding difference maps to the base image. We pick two samples which represent common outcomes in our data sets and use configuration 1 to generate the predictions.}
-	\label{fig:explongerm}
+	\label{fig:explongterm}
 \end{figure}
 
 \subsubsection*{Conversion Prediction}
-As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model and use a diagnosis classifier to predict $p_{AD}(G(x))$ and use thresholding to predict whether the subject is progressive or stable.
+As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model and use a diagnosis classifier to predict $p_{AD}(G(x))$ and use thresholding to predict whether the subject is progressive or stable. Moreover, based on the results of the Follow-Up and Fixed Time Step Prediction experiments, we calculate adjusted time steps for each model according to its aging performance and evalute the conversion probability on the images predicted using the adjusted time step. As an example, for $t = 4$, configuration 2 is known to produce images that, to the age regressor, appear aged by 4.01 years. However, for the same $t$, the time step estimated by the age regressor on the real image pairs is significantly lower at a value 2.53 years. Therefore, we rescale $t$ to match the value observed on the real image pairs in order to obtain more realistic predictions.
 
 Keeping in mind the imbalanced nature of the conversion data set, we use balanced accuracy and $\text{F}_1$-score as our metrics
 
@@ -881,64 +879,65 @@ Given a set of images $\{x\}$ from our conversion data set, we independently cal
 	\item We repeat steps 1 to 4 for each of the five best classifier in \autoref{tab:clfcrossval} and again take the mean
 \end{enumerate}
 
-We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for images generated using configurations 1 to 4 and compare the results in Tables \ref{tab:expconvaccuracy} and \ref{tab:expconvf1score}.
+We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for images generated using configurations 1 to 4 and report the results in \autoref{tab:expconv}.
 
 \begin{table}[h]
 	\begin{center}
-		\begin{tabular}{c c c c c c c c c}
+		\begin{tabular}{c c c c c c c c c c}
 			\toprule
 			\multirow{2}{*}{Config} &
 			 &
 			\multicolumn{2}{c}{Accuracy} &
-			\multicolumn{5}{c}{Classifier} \\
+			\multicolumn{5}{c}{Classifier} &
+			\multirow{2}{*}{$t$} \\
 			\cmidrule(lr){3-4}
 			\cmidrule(lr){5-9}
 			 & & $\mu$ & $\sigma$ & 1 & 2 & 3 & 4 & 5 \\
 			%------
-			\cmidrule(lr){1-9}
-			$x$\hphantom{*} &        & 63.81 & 1.67 & 64.17 & 65.41 & 64.18 & 61.06 & 64.25 \\
-			$y$\hphantom{*} & +12.09 & 75.90 & 0.90 & 74.52 & 76.17 & 76.69 & 75.80 & 76.31 \\
-			\cmidrule(lr){1-9}
-			1\hphantom{*}   & +2.39  & 66.20 & 1.52 & 65.52 & 65.94 & 65.57 & 65.60 & 68.38 \\
-			1*              & +2.95  & 66.75 & 2.33 & 69.76 & 65.83 & 69.02 & 64.59 & 64.58 \\
-			2\hphantom{*}   & +0.17  & 63.98 & 3.84 & 68.40 & 60.62 & 68.53 & 60.15 & 62.22 \\
-			2*              & +2.62  & 66.43 & 3.74 & 67.92 & 71.00 & 68.97 & 61.17 & 63.11 \\
-			3\hphantom{*}   & +0.90  & 64.71 & 2.21 & 65.38 & 67.98 & 62.73 & 63.01 & 64.46 \\
-			4\hphantom{*}   & +0.90  & 64.71 & 2.97 & 63.37 & 66.44 & 68.88 & 63.03 & 61.83 \\
+			\cmidrule(lr){1-10}
+			$x$\hphantom{*} &        & 63.81 & 1.67 & 64.17 & 65.41 & 64.18 & 61.06 & 64.25 &   \\
+			$y$\hphantom{*} & +12.09 & 75.90 & 0.90 & 74.52 & 76.17 & 76.69 & 75.80 & 76.31 &   \\
+			\cmidrule(lr){1-10}
+			1\hphantom{*}   & +2.39  & 66.20 & 1.52 & 65.52 & 65.94 & 65.57 & 65.60 & 68.38 & 4 \\
+			1*              & +2.95  & 66.75 & 2.33 & 69.76 & 65.83 & 69.02 & 64.59 & 64.58 & 3 \\
+			2\hphantom{*}   & +0.17  & 63.98 & 3.84 & 68.40 & 60.62 & 68.53 & 60.15 & 62.22 & 4 \\
+			2*              & +2.62  & 66.43 & 3.74 & 67.92 & 71.00 & 68.97 & 61.17 & 63.11 & 2 \\
+			3\hphantom{*}   & +0.90  & 64.71 & 2.21 & 65.38 & 67.98 & 62.73 & 63.01 & 64.46 & 4 \\
+			4\hphantom{*}   & +0.90  & 64.71 & 2.97 & 63.37 & 66.44 & 68.88 & 63.03 & 61.83 & 4 \\
 			\bottomrule
 		\end{tabular}
-		\caption{TODO conv accuracy}
-		\label{tab:expconvaccuracy}
+		\caption*{Balanced Accuracy}
+		%\label{tab:expconvaccuracy}
 	\end{center}
-\end{table}
-
-\begin{table}[h]
 	\begin{center}
-		\begin{tabular}{c c c c c c c c c}
+		\begin{tabular}{c c c c c c c c c c}
 			\toprule
 			\multirow{2}{*}{Config} &
 			 &
 			\multicolumn{2}{c}{$\text{F}_1$-Score} &
-			\multicolumn{5}{c}{Classifier} \\
+			\multicolumn{5}{c}{Classifier} &
+			\multirow{2}{*}{$t$} \\
 			\cmidrule(lr){3-4}
 			\cmidrule(lr){5-9}
 			 & & $\mu$ & $\sigma$ & 1 & 2 & 3 & 4 & 5 \\
 			%------
-			\cmidrule(lr){1-9}
-			$x$\hphantom{*} &        & 54.76 & 2.77 & 52.48 & 56.36 & 55.33 & 51.49 & 58.14 \\
-			$y$\hphantom{*} & +14.61 & 69.37 & 1.14 & 67.77 & 69.71 & 70.26 & 68.93 & 70.20 \\
-			\cmidrule(lr){1-9}
-			1\hphantom{*}   & +3.97  & 58.73 & 2.08 & 57.58 & 59.08 & 56.93 & 58.72 & 61.34 \\
-			1*              & +5.07  & 59.83 & 2.77 & 63.10 & 60.32 & 61.81 & 58.34 & 55.60 \\
-			2\hphantom{*}   & +1.17  & 55.93 & 4.03 & 61.24 & 51.55 & 59.31 & 52.03 & 55.52 \\
-			2*              & +4.42  & 59.18 & 3.75 & 61.22 & 62.82 & 61.72 & 53.04 & 57.09 \\
-			3\hphantom{*}   & +2.39  & 57.15 & 2.87 & 59.50 & 60.74 & 54.22 & 55.80 & 55.50 \\
-			4\hphantom{*}   & +0.93  & 55.69 & 4.81 & 55.51 & 58.24 & 62.04 & 53.76 & 48.86 \\
+			\cmidrule(lr){1-10}
+			$x$\hphantom{*} &        & 54.76 & 2.77 & 52.48 & 56.36 & 55.33 & 51.49 & 58.14 &   \\
+			$y$\hphantom{*} & +14.61 & 69.37 & 1.14 & 67.77 & 69.71 & 70.26 & 68.93 & 70.20 &   \\
+			\cmidrule(lr){1-10}
+			1\hphantom{*}   & +3.97  & 58.73 & 2.08 & 57.58 & 59.08 & 56.93 & 58.72 & 61.34 & 4 \\
+			1*              & +5.07  & 59.83 & 2.77 & 63.10 & 60.32 & 61.81 & 58.34 & 55.60 & 3 \\
+			2\hphantom{*}   & +1.17  & 55.93 & 4.03 & 61.24 & 51.55 & 59.31 & 52.03 & 55.52 & 4 \\
+			2*              & +4.42  & 59.18 & 3.75 & 61.22 & 62.82 & 61.72 & 53.04 & 57.09 & 2 \\
+			3\hphantom{*}   & +2.39  & 57.15 & 2.87 & 59.50 & 60.74 & 54.22 & 55.80 & 55.50 & 4 \\
+			4\hphantom{*}   & +0.93  & 55.69 & 4.81 & 55.51 & 58.24 & 62.04 & 53.76 & 48.86 & 4 \\
 			\bottomrule
 		\end{tabular}
-		\caption{TODO conv F1}
-		\label{tab:expconvf1score}
+		\caption*{$\text{F}_1$-Score}
+		%\label{tab:expconvf1score}
 	\end{center}
+	\caption{Results of the MCI Conversion Prediction experiment. The configurations annotated with a star use adjusted time steps for the image generation.}
+	\label{tab:expconv}
 \end{table}
 
 \chapter{Discussion}
