@@ -195,7 +195,7 @@ We consider two different possible loss terms
 	\end{split}
 \end{equation}
 
-with $(1)$ using ground truth labels whenever available and $(2)$ using the regressor throughout. We hypothesize (2) to be superior due to inaccuracies of the age regressor cancelling out. This assumption is supported by our experimental results in \autoref{sec:expagereg} and consequently, we use (2) for our model.
+with $(1)$ using ground truth labels whenever available and $(2)$ using the regressor throughout. We hypothesize (2) to be superior due to inaccuracies of the age regressor cancelling out. This assumption is supported by our experimental results in \autoref{sec:expreg} and consequently, we use (2) for our model.
 
 \subsubsection*{Diagnosis Classifier}
 Similar to the age regressor, we also add a loss term based on a diagnosis classifier $C$ to encourage the model to understand and distinguish between different diagnoses. Let $d_x$ denote the ground truth diagnosis label assigned to $x$ (with 0 = MCI, 1 = AD) and $\hat d_x$ denote the classifier's estimated probability of the brain in image $x$ being affected by AD. As before, we examine two possible cross entropy loss terms between ground truth labels and the estimated probabilities respectively and implement $(2)$, following the same reasoning used in selecting the age regressor loss term.
@@ -234,14 +234,14 @@ To summarize, we obtain the complete objective for the generator as follows
 \begin{equation}
 	\mathcal{L}_G =
 		\mathcal{L}_{ws} +
-		\lambda_{1} \; \mathcal{L}_{kl} +
-		\lambda_{2} \; \mathcal{L}_{age} + 
-		\lambda_{3} \; \mathcal{L}_{dx} + 
-		\lambda_{4} \; \mathcal{L}_{sim} + 
-		\lambda_{5} \; \mathcal{L}_{sparse}
+		\lambda_{kl} \; \mathcal{L}_{kl} +
+		\lambda_{age} \; \mathcal{L}_{age} + 
+		\lambda_{dx} \; \mathcal{L}_{dx} + 
+		\lambda_{sim} \; \mathcal{L}_{sim} + 
+		\lambda_{sparse} \; \mathcal{L}_{sparse}
 \end{equation}
 
-where $\mathcal{L}_{ws}$ is the generator's component of the Wasserstein loss function and $\mathcal{L}_{kl}$ consists of the covariance and precision terms from \autoref{eq:voxloss}. Furthermore, we treat $ \{ \lambda_i \}_{i\;\in\;1\;..\;5}$ as hyperparameters.
+where $\mathcal{L}_{ws}$ is the generator's component of the Wasserstein loss function and $\mathcal{L}_{kl}$ consists of the covariance and precision terms from \autoref{eq:voxloss}. All $ \lambda $ in the objective as well as $\lambda_{prior}$ in \autoref{eq:voxloss} are treated as model hyperparameters.
 
 \subsection{Network Architecture}
 Based on architectures applied to similar problems such as \cite{wegmayr2019generative} and \cite{baumgartner2018visual}, we expect the brain aging problem to be a more difficult task compared to brain registration as implemented in Voxelmorph. Therefore, we significantly increase the complexity of the UNet model as shown in \autoref{fig:archour}.
@@ -464,7 +464,7 @@ The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject
 \begin{figure}[h]
 	\centering
 	\includegraphics[width=\linewidth]{images/timestep_plots/hist} 
-	\caption{The histogram for time step $t$ across all pairs in the pairs data set. To mitigate the bias towards smaller $t$, we calculate sample weights to be used during training of the generator model.}
+	\caption{The histogram for time step $t$ across all pairs in the pairs data set. To mitigate the bias towards smaller $t$, we calculate sample weights to be used during training of our generator models.}
 	\label{fig:timestephist}
 \end{figure}
 
@@ -519,32 +519,32 @@ Finally, as the name implies, the \textit{Leave One Visit Out Set} is formed by 
 
 \chapter{Experiments}
 
-\section{Age Regressor} \label{sec:expagereg}
+\section{Age Regressor} \label{sec:expreg}
 Validating the performance of a generative model is a hard problem in general. Beyond visual inspection of the outputs, we also obtain an estimation of the age label, and by extension the time step, by applying a pre-trained age regressor to our model's outputs. Furthermore, the regressor is also included in the generator loss function as described in \autoref{sec:adaagereg}. Given its importance in the validation of our generative model, we evaluate the regressor's performance on a number of different tasks.
 
 The regressor is implemented as a 3D CNN with nine layers of which eight use batch normalization, and trained using the Adam optimizer with $\alpha = 0.001, \beta_1 = 0.9, \beta_2 = 0.999 $ and $ \epsilon = 0.0001 $.
 
 \subsection*{Absolute Error}
-First, we train the regressor for 30'000 batches of 32 samples each optimizing the absolute mean error as its objective function. Using our 5-fold data split, we perform cross validation and present the results in \autoref{tab:resagecrossval}. \autoref{fig:regxrxrhat} shows the estimated age $ \hat a_x $ against the ground truth label $a_x$ for one validation split. We note that the estimator tends to the mean, that is, its estimates are most accurate around the mean age across the data set of 75 years, and are low for subjects above the mean and high for subjects below the mean. Given the linear nature of the loss function, this is to be expected.
+First, we train the regressor on 50'000 batches of 32 samples each optimizing the absolute mean error as its objective function. Using our 5-fold data split, we perform cross validation which yields a mean loss of 3.86 years with a standard deviation of 3.05 (see \autoref{tab:expregcrossval}). \autoref{fig:regxrxrhat} shows the estimated age label $ \hat a_x $ against the ground truth label $a_x$ for one validation split. We note that the estimator tends to the mean, that is, its estimates are most accurate around the data set's mean age of 75 years with a tendency to be low for subjects above the mean and high for subjects below the mean. Given the linear nature of the loss function, this is to be expected.
 
-However, in our generative model, rather than estimating the absolute age of an image, the age regressor is used to estimate the relative age difference $a_y - a_x$ for an image pair $(x, y)$. Therefore, we further evaluate its performance on this task using our data set of image pairs. As before, we perform 5-fold cross validation and report the results in \autoref{tab:regcrossval}. \autoref{fig:regxryr} compares the absolute losses for $x$ and $y$ and shows the error cancelling effect discussed in \autoref{sec:adaagereg}. Furthermore, we also estimate the age difference as $\hat a_y - \hat a_x$ for one split and visualize it against the ground truth time step in \autoref{fig:regddhatreal}. Using linear regression on our data points, we obtain an intercept of 0.03 and a slope of 0.67, indicating the estimated age difference tends to be too small for increasing $t$. This can be explained by closer examination of \autoref{fig:regxrxrhat} which shows that as the estimate $\hat a_x$ tends to the mean for labels futher away from it, relative age differences are subject to a shrinkage effect. 
+However, in our generative model, rather than estimating the absolute age of an image, the age regressor is used to estimate the relative age difference $a_y - a_x$ for an image pair $(x, y)$. As disucussed in \autoref{sec:adaagereg}, we expect errors to partially cancel out in this setting and thus evaluate the regressor's performance on our data set of image pairs to confirm this hypothesis. As before, we perform 5-fold cross validation and report the results in \autoref{tab:regcrossval}. \autoref{fig:regxryr} compares the absolute losses for $x$ and $y$ and shows the error cancelling effect discussed in \autoref{sec:adaagereg}. Furthermore, we also estimate the age difference as $\hat a_y - \hat a_x$ for one split and visualize it against the ground truth time step in \autoref{fig:regddhatreal}. Using linear regression on all data points, we obtain an intercept of 0.03 and a slope of 0.67, indicating TODO the estimated age difference tends to be too small for increasing $t$. This can be explained by closer examination of \autoref{fig:regxrxrhat} which shows that as the estimate $\hat a_x$ tends to the mean for labels futher away from it, relative age differences are subject to a shrinkage effect. 
 
 Note that since we are performing these experiments on real image pairs, the results represent an upper bound for the performance of our generative model.
 %TODO(crossval)
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.9\linewidth]{images/age_plots/xr_xrhat} 
+	\includegraphics[width=.8\linewidth]{images/age_plots/xr_xrhat} 
 	\vspace*{-15pt}
-	\caption{Age regressor estimates on 2937 validation samples from our base image data set. Note how the predicitions tend to the mean, with a slope of 0.58 compared to the target of 1. The subject's diagnosis does not appear to have a major impact on the performance.}
+	\caption{Age regressor estimates on 2937 validation samples from our base image data set. Note how the predicitions tend to the mean, with a slope of 0.58 compared to the target of 1 indicated in black. The subject's diagnosis does not appear to have a significant impact on the performance. Indicated in red, we observe that as we move away from the mean, the predicted relative time differences between two images shrink as a consequence of the estimator's tendency to the mean.}
 	\label{fig:regxrxrhat}
 \end{figure}
 
 \begin{figure}
 	\centering
-	\includegraphics[width=.9\linewidth]{images/age_plots/xr_yr_dx} 
+	\includegraphics[width=.8\linewidth]{images/age_plots/xr_yr} 
 	\vspace*{-15pt}
-	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, with each axis representing one of the two images. While the absolute age error for a single image is quite significant with a mean of 3.39, the estimate of the relative age difference between two images from the same subject is considerably more accurate with a mean error of 1.21.}
+	\caption{Visualization of the error cancelling effect on 2651 pairs of validation images from our pairs data set. Each axis represents the difference between the predicted and true age labels for one image. We observe that while the absolute error for an prediction on a single image is quite significant with a mean of 3.39, the estimate of the relative age difference between two images from the same subject is considerably more accurate with a mean error of 1.21. The brightness of each data point corresponds to the averaged true age labels of the image pair, revealing the tendency to the mean.}
 	\label{fig:regxryr}
 \end{figure}
 
@@ -561,27 +561,36 @@ We also examine the performance of the same architecture optimizing the mean squ
 
 \begin{table}[h]
 	\begin{center}
-		\begin{tabular}{c c c c c}
+		\begin{tabular}{c c c c c | c c c c}
 			\toprule
-			\multirow{2}{*}{Split} & 
+			 & 
+			\multicolumn{4}{c}{absolute age} & 
+			\multicolumn{4}{c}{age difference} \\
+			\cmidrule(lr){2-5}
+			\cmidrule(lr){6-9}
+			\multirow{2}{*}{Split} &
+			\multicolumn{2}{c}{absolute} & 
+			\multicolumn{2}{c}{squared} &
 			\multicolumn{2}{c}{absolute} & 
 			\multicolumn{2}{c}{squared} \\
 			\cmidrule(lr){2-3}
 			\cmidrule(lr){4-5}
+			\cmidrule(lr){6-7}
+			\cmidrule(lr){8-9}
 			 & $\mu$ & $\sigma$ & $\mu$ & $\sigma$ \\ 
 			%------
-			\cmidrule(lr){1-5}
+			\cmidrule(lr){1-9}
 			$\mathcal{S}_0$ & 3.58 & 2.92 & 3.62 & 2.96 \\
 			$\mathcal{S}_1$ & 3.69 & 2.93 & 3.86 & 2.97 \\
 			$\mathcal{S}_2$ & 4.07 & 3.01 & 4.09 & 2.97 \\
 			$\mathcal{S}_3$ & 4.07 & 3.07 & 3.89 & 2.90 \\
 			$\mathcal{S}_4$ & 3.90 & 3.31 & 4.06 & 3.32 \\
-			\cmidrule(lr){1-5}
+			\cmidrule(lr){1-9}
 			                & 3.86 & 3.05 & 3.90 & 3.02 \\
 			\bottomrule
 		\end{tabular}
-		\caption{Cross validated mean and standard deviation of the absolute error for the age regressor model, comparing absolute and squared loss objectives.}
-		\label{tab:regcrossval}
+		\caption{Cross validated mean and standard deviation of our age regressor model on the tasks of predicting the age label of a single image as well as estimating the age difference for a pair of images. We also compare models trained using absolute and squared loss objectives.}
+		\label{tab:expregcrossval}
 	\end{center}
 \end{table}
 
@@ -630,15 +639,15 @@ We perform cross validation using the 5-fold data split. Due to high variance in
 \end{table} %TODO(too wide)
 
 \section{Diffeomorphic Models}
-
+\begin{comment}
 \subsection{Voxelmorph}
 To establish a baseline, we first train a variation of the Voxelmorph architecture described in \autoref{sec:vox} with minimal modifications to support the brain aging task. These modifications include removing the target image $y$ from the generator input as well as extending the scaling and squaring method to produce output deformations $\Phi^{(t)}$ for arbitrary $t$ as described in \autoref{sec:adaarbtimestep}. Regarding hyperparameters, we use $\lambda = 25$ as suggested in \cite{dalca2018unsupervised} and reduce $\sigma$ to $0.01$ to account for the smaller magnitude of the changes in the brain aging setting discussed in \autoref{sec:ada}.
-
+\end{comment}
 \subsection{Synthetic Data}
-To validate our modifications to the architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:datsynth}. Visual inspection of the results, presented in \autoref{fig:toydata} confirms the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data samples.
+To validate our modifications to the Voxelmorph architecture, we first train the model on 1'000 batches of 4 samples each from the synthetic data set described in \autoref{sec:datsynth}. Visual inspection of the results, presented in \autoref{fig:toydata} confirms the model's ability to learn and integrate over a stationary velocity field to generate deformation fields for variable time steps $t$. Furthermore, we demonstrate the effectiveness of the sparseness penalty in suppressing the deformation field in areas of little change. Note that neither the age regressor nor the diagnosis classifier are used in any of these experiments as there are no corresponding features in the synthetic data samples. %TODO(redo runs?)
 
 \begin{figure}
-	%TODO(maybe flip time bar(
+	%TODO(maybe flip time bar)
 	\centering
 	\input{tikz/toydata}
 	\vspace*{-15pt}
@@ -646,7 +655,7 @@ To validate our modifications to the architecture, we first train the model on 1
 	\label{fig:toydata}
 \end{figure}
 
-\subsection{MRI Data} %TODO(section title doesn't really make sense, more like adapted architecture, but then...)
+\subsection{MRI Data}
 
 We train the model in a number of different configurations and on different data sets listed in \autoref{tab:ganconfig}.
 
@@ -689,7 +698,7 @@ We train the model in a number of different configurations and on different data
 	\end{center}
 \end{table}
 
-For the remaining hyperparameters, we use an $L_1$ similarity loss of $\lambda_{sim} = 200$ and drop the sparseness loss altogether due to negative performance impacts even for small $\lambda_{sparse}$. During training, the velocity field $v$ is integrated using up to $T = 7$ squaring steps, resulting in a maximum number of $256$ atomic steps. In combination with the maximum time step of 6 years in our pairs data set, this corresponds to a temporal precision of 8.6 days.
+For the remaining hyperparameters, we use $\lambda_{kl} = 10$, $\lambda_{prior} = 25$, $\lambda_{sim} = 200$ and $\lambda_{sparse} = 0$ due to negative performance impacts even for small sparseness loss weights. During training, the velocity field $v$ is integrated using up to $T = 7$ squaring layers, resulting in a maximum number of $256$ atomic steps. In combination with the maximum time step of 6 years in our pairs data set, this corresponds to a temporal precision of 8.6 days.
 
 Note that for the training of the regressor as well as the classifier used as loss terms in configurations 2, 3, and 4, $\mathcal{S}_{train}$ and $\mathcal{S}_{valid}$ are swapped. While this separation isn't required to ensure the validity of the results, a regressor or classifier pre-trained on the generator training data will predict age and diagnosis labels which are essentially identical to the real labels, therefore negating the error cancelling effect discussed in \autoref{sec:adaagereg}. Indeed, using this configuration results in impressive looking but overly confident results as seen in TODO(plot with slope 1)
 
@@ -846,43 +855,66 @@ Given a set of images $\{x\}$ from our conversion data set, we independently cal
 	\item We repeat steps 1 to 4 for each of the five best classifier in \autoref{tab:clfcrossval} and again take the mean
 \end{enumerate}
 
-We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for our generated images $G(x)$ for TODO(which runs) and compare the results in TODO(table).
+We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for images generated using configurations 1 to 4 and compare the results in Tables \ref{tab:expconvaccuracy} and \ref{tab:expconvf1score}.
 
 \begin{table}[h]
 	\begin{center}
-		\begin{tabular}{c c c c c c c c}
+		\begin{tabular}{c c c c c c c c c}
 			\toprule
-			\multirow{2}{*}{Config} & 
-			\multicolumn{2}{c}{accuracy} &
+			\multirow{2}{*}{Config} &
+			 &
+			\multicolumn{2}{c}{Accuracy} &
 			\multicolumn{5}{c}{Classifier} \\
-			\cmidrule(lr){2-3}
-			\cmidrule(lr){4-8}
-			 & $\mu$ & $\sigma$ & 0 & 1 & 2 & 3 & 4 \\
+			\cmidrule(lr){3-4}
+			\cmidrule(lr){5-9}
+			 & & $\mu$ & $\sigma$ & 1 & 2 & 3 & 4 & 5 \\
 			%------
-			\cmidrule(lr){1-8}
-			$y$ & 75.90 & 0.009 & 74.52 & 76.17 & 76.69 & 75.80 & 76.31 \\
-			$x$ & 63.81 & 0.017 & 64.17 & 65.41 & 64.18 & 61.06 & 64.25 \\
-			\cmidrule(lr){1-8}
-			0   & 66.20 & 0.015 & 65.52 & 65.94 & 65.57 & 65.60 & 68.38 \\
-			1   & 63.98 & 0.038 & 68.40 & 60.62 & 68.53 & 60.15 & 62.22 \\
-			2   & 64.71 & 0.022 & 65.38 & 67.98 & 62.73 & 63.01 & 64.46 \\
-			\cmidrule(lr){1-8}
-					
+			\cmidrule(lr){1-9}
+			$x$ &        & 63.81 & 1.67 & 64.17 & 65.41 & 64.18 & 61.06 & 64.25 \\
+			$y$ & +12.09 & 75.90 & 0.90 & 74.52 & 76.17 & 76.69 & 75.80 & 76.31 \\
+			\cmidrule(lr){1-9}
+			1   & +2.39  & 66.20 & 1.52 & 65.52 & 65.94 & 65.57 & 65.60 & 68.38 \\
+			2   & +0.17  & 63.98 & 3.84 & 68.40 & 60.62 & 68.53 & 60.15 & 62.22 \\
+			3   & +0.90  & 64.71 & 2.21 & 65.38 & 67.98 & 62.73 & 63.01 & 64.46 \\
+			4   & +0.90  & 64.71 & 2.97 & 63.37 & 66.44 & 68.88 & 63.03 & 61.83 \\
 			\bottomrule
 		\end{tabular}
 		\caption{Cross validated accuracy and $\text{F}_1$-score of our classifier models.}
-		\label{tab:expconvresults}
+		\label{tab:expconvaccuracy}
 	\end{center}
-\end{table} %TODO(too wide)
+\end{table}
 
-%5x classifier, from cross val
-%5x threshold each
-%xr = baseline
-%yr = upper bound
-
-%F1 score, accuracy
+\begin{table}[h]
+	\begin{center}
+		\begin{tabular}{c c c c c c c c c}
+			\toprule
+			\multirow{2}{*}{Config} &
+			 &
+			\multicolumn{2}{c}{$\text{F}_1$-Score} &
+			\multicolumn{5}{c}{Classifier} \\
+			\cmidrule(lr){3-4}
+			\cmidrule(lr){5-9}
+			 & & $\mu$ & $\sigma$ & 1 & 2 & 3 & 4 & 5 \\
+			%------
+			\cmidrule(lr){1-9}
+			$x$ &        & 54.76 & 2.77 & 52.48 & 56.36 & 55.33 & 51.49 & 58.14 \\
+			$y$ & +14.61 & 69.37 & 1.14 & 67.77 & 69.71 & 70.26 & 68.93 & 70.20 \\
+			\cmidrule(lr){1-9}
+			1   & +3.97  & 58.73 & 2.08 & 57.58 & 59.08 & 56.93 & 58.72 & 61.34 \\
+			2   & +1.17  & 55.93 & 4.03 & 61.24 & 51.55 & 59.31 & 52.03 & 55.52 \\
+			3   & +2.39  & 57.15 & 2.87 & 59.50 & 60.74 & 54.22 & 55.80 & 55.50 \\
+			4   & +0.93  & 55.69 & 4.81 & 55.51 & 58.24 & 62.04 & 53.76 & 48.86 \\
+			\bottomrule
+		\end{tabular}
+		\caption{Cross validated accuracy and $\text{F}_1$-score of our classifier models.}
+		\label{tab:expconvf1score}
+	\end{center}
+\end{table}
 
 \chapter{Discussion}
+
+given large number of hyperparameters combined with training times of up to two days
+
 Architecture with many components, hard to pinpoint problem origin
 
 Large number of hyperparameters, high training time
