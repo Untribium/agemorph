@@ -628,6 +628,7 @@ We perform cross validation using the 5-fold data split, yielding an accuracy of
 
 \begin{table}[h]
 	\begin{center}
+		\makebox[\textwidth][c]{
 		\begin{tabular}{c c c c c c c c c c c}
 			\toprule
 			\multirow{2}{*}{Split} & 
@@ -653,10 +654,11 @@ We perform cross validation using the 5-fold data split, yielding an accuracy of
 			%                & 3.86 & 3.05 & 3.90 & 3.02 & & & & & & \\
 			\bottomrule
 		\end{tabular}
+}
 		\caption{Cross validated accuracy and $\text{F}_1$-score of our classifier models.}
 		\label{tab:clfcrossval}
 	\end{center}
-\end{table} %TODO(too wide)
+\end{table}
 
 \section{Diffeomorphic Models}
 \begin{comment}
