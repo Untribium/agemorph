@@ -46,7 +46,7 @@ The model uses a variational inference method to generate a stationary displacem
 
 Spatial smoothness of z is is encouraged by letting ${\Sigma_z^{-1} = \Lambda_z = \lambda L}$ where $\Lambda_z$ is a precision matrix, $L$ is the Laplacian of a neighborhood graph defined as $L = D - A$, with graph degree matrix $D$ and voxel adjacency matrix $A$, and $\lambda$ denotes a parameter controlling the scale of the velocity field.
 
-The generator's output is modeled as a gaussian distribution with $y$, the target image, as its mean and a standard deviation of $\sigma$. In other words, the warped image $x$ is interpreted as a noisy oberservation of the target image $y$
+The generator's output is modeled as a gaussian distribution with $y$, the target image, as its mean and a standard deviation of $\sigma$. In other words, the warped image $x \circ \Phi_z$ is interpreted as a noisy observation of the target image $y$
 \begin{equation}
 	p(y|z;x) = \mathcal{N}(y; x \circ \Phi_z, \sigma^2 \mathbbm{I})
 \end{equation}
@@ -86,33 +86,33 @@ The complete loss function can be separated into two components, a reconstructio
 	\end{split}
 \end{equation}
 
-The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$. This effect can be shown more explicitly by rewriting the precision term as $ { \frac{\lambda}{2} \sum \sum_{j \in N(I)} ( \mu[i] - \mu[j])^{2} } $, where $N(i)$ denotes the set of neighbors of voxel $i$. Both $\sigma$ and $\lambda$ are treated as hyperparameters, respectively controlling the reconstruction penalty and the magnitude of the velocity field.
+The first term enforces similarity between the target image $y$ and the warped source image $x \circ \Phi_z$, the second term encourages the posterior to be close to the prior $p(z)$ while the third term spatially smoothes the mean $\mu_{z | x, y}$. This effect can be shown more explicitly by rewriting the precision term as $ { \frac{\lambda}{2} \sum \sum_{q \in N(p)} ( \mu[p] - \mu[q])^{2} } $, where $N(p)$ denotes the set of neighbors of voxel $p$. Both $\sigma$ and $\lambda$ are treated as hyperparameters, respectively controlling the reconstruction penalty and the magnitude of the velocity field.
 
 \subsubsection*{Network Architecture}
-The parameters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers with strides of two and three upsampling layers of 32 filters each. All convolutional layers use leaky ReLU activations with $\alpha = 0.2$ and kernels of size $3\times3\times3$. See \autoref{fig:archvox} for an illustration of the generator model.
+The parameters $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$ are estimated by a convolutional neural network (CNN). The architecture, which takes $x$ and $y$ as input, is based on a fully convolutional 3D UNet consisting of a convolutional layer of 16 filters followed by four downsampling layers and three upsampling layers with strides of two and 32 filters each. All convolutional layers use leaky ReLU activations with $\alpha = 0.2$ and kernels of size $3\times3\times3$. Refer to \autoref{fig:archvox} for an illustration of the generator model.
 
 \begin{figure}
 	\centering
 	\input{tikz/arch_vox}
-	\caption{Voxelmorph for diffeomorphic image registration as proposed in \cite{dalca2018unsupervised}. The UNet-based encoder receives both $x$ and $y$ as inputs and approximates the distributon $q_\psi$ from which the velocity field $z$ is sampled. Subsequently, $z$ is integrated using a configurable number of scaling and squaring layers resulting in the final deformation field $\Phi^{(1)}$ which is then applied to the input image $x$.}
+	\caption{Voxelmorph for diffeomorphic image registration as proposed in \cite{dalca2018unsupervised}. The UNet-based encoder receives both $x$ and $y$ as inputs and approximates the distribution $q_\psi$ from which the velocity field $z$ is sampled. Subsequently, $z$ is integrated using a configurable number of scaling and squaring layers resulting in the final deformation field $\Phi^{(1)}$ which is then applied to the input image $x$.}
 	\label{fig:archvox}
 \end{figure}
 
 %Given $\mu_{z | x, y}$ and $\Sigma_{z | x, y}$, 
-Using the reparameterization trick \cite{kingma2013auto}, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $ , which is then integrated using scaling and squaring layers newly introduced in \cite{dalca2018unsupervised} to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
+Using the reparameterization trick \cite{kingma2013auto}, the subsequent layer then samples a new stationary velocity field $ { z_k \sim \mathcal{N}(\mu_{z | x, y}, \Sigma_{z | x, y}) } $, which is then integrated using scaling and squaring layers newly introduced in \cite{dalca2018unsupervised} to compute $\Phi_{z_k} = \exp(z_k)$. Specifically, one such layer performs a differentiable vector field composition, that is, given vector fields $a$ and $b$, it computes $(a \circ b)(p) = a(b(p))$ for each voxel $p$. Note that linear interpolation is used in $a$ as $b(p)$ generally yields a non-integer location. The recurrence in \autoref{eq:voxrecurrence} is implemented using $T = 7$ of these layers. Finally, a spatial transform layer applies the deformation field $\Phi_{z_k}$ to the source image $x$ to obtain $x \circ \Phi_{z_k}$.
 
 The network is implemented in Keras with a Tensorflow backend and trained end-to-end using the Adam \cite{kingma2014adam} optimizer.
 
 \section{Adaptation for Brain Aging}
 \label{sec:ada}
-While the tasks of brain registration and generative brain aging may not appear to have much in common on the surface, both can be described in terms of learning a deformation function. As such, the approach used in \cite{balakrishnan2019voxelmorph} can be adapted for the brain aging setting. However, while there are simililarites, a number of key differences in the problem settings require modifications to the model design.
+While the tasks of brain registration and generative brain aging may not appear to have much in common on the surface, both can be described in terms of learning a deformation function. As such, the approach used in \cite{balakrishnan2019voxelmorph} can be adapted for the brain aging setting. However, while there are similarities, a number of key differences in the problem setting require modifications to the model design.
 
 Most importantly, the brain registration task as defined in \cite{balakrishnan2019voxelmorph} and described above is an unsupervised learning problem where both the source image $x$ and the target image $y$ are available in the prediction step. Conversely, since the goal of the brain aging task is to predict the future state of $x$, the aged target image $y$ is only available during training and therefore cannot be a part of the model's input.
 
 Furthermore, the learned deformations for the brain aging task can be expected to be much smaller in scale, therefore increasing the relative magnitude of the noise introduced as part of the reconstruction term in \autoref{eq:voxloss}. In turn, this lowers the model's ability to capture subtle changes which may negatively affect its performance in the brain aging setting. While this problem can be addressed by lowering the hyperparameter $\sigma$, this comes at the cost of decreased generalization as the model is forced to produce results which are progressively closer to the target image $y$.
 
 Finally, while intermediate deformations $\Phi^{(t)}$ for time steps $t \notin \{0, 1\}$ are not of primary interest in the brain registration task, the ability to predict a brain image $G(x) = x \circ \Phi_z^{(t)}$ for arbitrary $t$ promises valuable insights into the progression of neurodegenerative diseases as well as the brain's aging process in general.
-Furthermore, the ability to train on image pairs over a large range of different time steps is crucial as the number of image pairs for any particular fixed $t$ is very limited. Moreover, training on a continuous range of time steps as opposed to a limited number of fixed intervals should result in improved generalization.
+Furthermore, the ability to train on image pairs over a large range of different time steps is crucial as the number of image pairs for any particular fixed $t$ is very limited. Lastly, training on a continuous range of time steps as opposed to a limited number of fixed intervals should result in improved generalization.
 
 \subsection{Adversarial Loss}
 % maybe say what we do first, then why?
@@ -138,13 +138,13 @@ where $D(x)$ is a probability and $z$ is usually sampled from a latent distribut
 	\end{split}
 \end{equation}
 
-where the image pair $(x, y)$ and the corresponding age difference $t$ are samples from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Furthermore, to enable the discriminator to discern pairs with differing time steps, we additionally pass $t$ as an input. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
+where the image pair $(x, y)$ and the corresponding age difference $t$ are sampled from the real data distribution. Note that in order to avoid the issue of mode collapse, where the generator outputs the same image for all inputs, the discriminator also observes $x$. Furthermore, to enable the discriminator to discern pairs with differing time steps, we additionally pass $t$ as an input. Both $G$ and $D$ are implemented as neural networks which are trained in an alternating fashion. 
 
 We use a variation of the original GAN known as Wasserstein GAN (WGAN) \cite{arjovsky2017wasserstein} in which the discriminator $D$ is replaced by a critic with real-valued outputs instead of probabilities. The critic is limited to the set of 1-Lipschitz functions, which is enforced by imposing a gradient penalty as proposed in \cite{gulrajani2017improved}.
 
 \subsection{Arbitrary Time Step Scaling and Squaring}
 \label{sec:adaarbtimestep}
-The scaling and squaring method as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly undesirable for the brain aging task. Therefore, in this section we propose an extension to the scaling and squaring method enabling integration of the stationary velocity field $v$ to arbitrary time steps $t$. As a result of this modification, our model can predict and be trained on image pairs with arbitrary time steps greatly increasing the available training data as well as its ability to generalize over different time ranges.
+The scaling and squaring method \cite{arsigny2006log} as described in \autoref{chap:voxelmorph} is fixed to one specific time step $t$ determined by the model configuration as well as the training data. As mentioned above, this is not necessarily an issue in the case of image registration but highly undesirable for the brain aging task. Therefore, in this section we propose an extension to the scaling and squaring method enabling integration of the stationary velocity field $v$ to arbitrary time steps $t$. As a result of this modification, our model can predict and be trained on image pairs with arbitrary time steps, thus greatly increasing the available training data as well as its ability to generalize over different time ranges.
 
 One straightforward approach is to abandon the scaling and squaring method in favor of iterative composition
 \begin{equation}
@@ -154,27 +154,27 @@ One straightforward approach is to abandon the scaling and squaring method in fa
 	}_{\lceil 2^T \times \: t \rceil \ \text{times}}
 \end{equation}
 
-where $2^T$ is the scaling factor and $t$ is the desired time step. Given a large enough $T$, this method can handle any positive time step with arbitrary precision, however very quickly at the cost of computional infeasibility. Similarly, we could use a two step approach, calculating the deformation $\Phi^{(\epsilon)}$ for some time step $\epsilon$ by scaling and squaring, followed by iterative composition of $\Phi^{(\epsilon)}$. While this is much faster in practice, the choice of $\epsilon$ represents a trade-off between precision, data availability and computational viability.
+where $2^T$ is the scaling factor and $t$ is the desired time step. Given a large enough $T$, this method can handle any positive time step with arbitrary precision, however very quickly at the cost of computational infeasibility. Similarly, we could use a two step approach, calculating the deformation $\Phi^{(\epsilon)}$ for some time step $\epsilon$ by scaling and squaring, followed by iterative composition of $\Phi^{(\epsilon)}$. While this is much faster in practice, the choice of $\epsilon$ represents a trade-off between precision, data availability and computational viability.
 
-We observe that in addition to the final deformation field $\Phi^{(1)}$, the recurrence also yields intermediate deformations $\{ \Phi^{(1 / 2^{t})} \}_{t \; \in \; 1 .. T} $ at no additional computational cost. For instance, the computation of a deformation field corresponding to a time step of 8 years additionally yields the deformations for (and therefore the ability to predict and train on) time steps of ${ 4, 2, 1, \sfrac{1}{2}, \ldots }$ years. While this represents an improvement, the benefits are relatively minor as we are still limited to a small and very specific set of time steps.
+We observe that in addition to the final deformation field $\Phi^{(1)}$, the recurrence also yields intermediate deformations $\{ \Phi^{(1 / 2^{t})} \}_{t \; \in \; 1 .. T} $ at no additional computational cost. For instance, the computation of a deformation field corresponding to a time step of $t = 8$ years additionally yields the deformations for (and therefore the ability to predict and train on) time steps of ${ 4, 2, 1, \sfrac{1}{2}, \ldots }$ years. While this represents an improvement, the benefits are relatively minor as we are still limited to a small and very specific set of time steps.
 
-However, from the properties of one-parameter subgroups in \autoref{eq:voxoneparamsubgroup} we know that any two given deformations $\Phi^{(t)}$ and $\Phi^{(t')}$ can be composed to obtain ${ \Phi^{(t + t')} = \Phi^{(t)} \circ \Phi^{(t')} }$. It follows that for any time step $t \in [0, 1)$, the corresponding deformation $\Phi^{(t)}$ can be approximated to within a temporal precision factor $\epsilon$ by composing deformations from a subset $\mathcal{S}^{(t)} \subset \{ \Phi^{(1 / 2^{t})} \}_{t \; \in \; 1 .. T} $ of intermediate deformations
+However, from the properties of one-parameter subgroups in \autoref{eq:voxoneparamsubgroup} we know that any two given deformations $\Phi^{(t)}$ and $\Phi^{(t')}$ can be composed to obtain ${ \Phi^{(t + t')} = \Phi^{(t)} \circ \Phi^{(t')} }$. It follows that for any time step $t \in [0, 1)$, the corresponding deformation $\Phi^{(t)}$ can be approximated to within a temporal precision factor $\epsilon$ by composing over a subset $\mathcal{S}^{(t)} \subset \{ \Phi^{(1 / 2^{t})} \}_{t \; \in \; 1 .. T} $ of intermediate deformations
 \begin{equation}
 	\Phi^{(t)} = \underset{\Phi^{(i)} \; \in \; \mathcal{S}^{(t)}}{\bigcirc} \Phi^{(i)}
 \end{equation}
 
-In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors that span the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. Intuitively speaking, this is analogous to how any positive integer can be expressed in $base_2$ as the sum over a set of powers of 2. The deformation is computed iteratively over all squaring steps as laid out in \autoref{alg:arbtimestep}. Refer to \autoref{fig:arbtimestep} for a visual example of one such composition.
+In other words, $\{ \Phi^{(1 / 2^{s})} \}_{s \; \in \; 1 .. T}$ can be interpreted as a set of vectors spanning the space of all deformations $\Phi^{(t)}$ for $t \in [0, 1)$, where each $\Phi^{(t)}$ is uniquely represented by a binary vector in this space. Intuitively speaking, this is analogous to how any positive integer can be expressed in $base_2$ as the sum over a set of powers of 2. The deformation is computed iteratively over all squaring steps as laid out in \autoref{alg:arbtimestep}. Refer to \autoref{fig:arbtimestep} for a visual example of one such composition.
 
-The temporal precision $\epsilon$, i.e. the smallest difference in time steps representable by the model, is determined by the number of squaring steps $T$ as well as the maximum time step $t_{max}$ used during training. Specifically, $\epsilon$ is the time step corresponding to the smallest deformation field $\Phi^{(\sfrac{1}{2^T})} = \sfrac{v}{2^T}$ and therefore $\epsilon = \sfrac{t_{max}}{2^T}$. As an example, given $t_{max} = 6$ years and $T = 7$, $\epsilon = 0.046$ years or approximately $17$ days.
+The temporal precision $\epsilon$, i.e. the smallest difference in time steps representable by the model, is determined by the number of squaring steps $T$ as well as the maximum time step $t_{max} = \max_{t\:\in\:\mathcal{D}_{train}} t $ used during training. Specifically, $\epsilon$ is the time step corresponding to the smallest deformation field $\Phi^{(\sfrac{1}{2^T})} = \sfrac{v}{2^T}$ and therefore $\epsilon = \sfrac{t_{max}}{2^T}$. As an example, given $t_{max} = 6$ years and $T = 7$, $\epsilon = 0.046$ years or approximately $17$ days.
 
-In practice, the efficiency of the calulation can be improved by computing only the deformations up to the largest intermediate step required in the composition of $\Phi^{(t)}$. We also note that predictions for time steps $t > 1$ can be generated by dynamically increasing the number of squaring layers during inference.
+In practice, the efficiency of the calculation can be improved by computing only the deformations up to the largest intermediate step required in the composition of $\Phi^{(t)}$. We also note that predictions for time steps $t > 1$ can be generated by dynamically increasing the number of squaring layers during inference.
 
 \input{algo/timestep}
 
 \begin{figure}
 	\centering
 	\input{tikz/timestep}
-	\caption{Arbitrary time step scaling and squaring with $T = 3$ squaring and $ 2^{T} = 8 $ atomic steps, shown for one voxel $ \vec p $. The deformation $ \Phi^{(t)} $ can be approximated at any time step $ t \in [0, 1] $ by composing a subset of intermediate deformations. Note that in practice, larger $T$ are used resulting in an exponentially higher number of atomic steps and therefore a better approximation, e.g. $T = 7$ yielding $ 2^7 = 128 $ atomic steps. We calculate the deformation for all voxels $ \vec{p} $ in parallel.} \label{fig:arbtimestep}
+	\caption{Arbitrary time step scaling and squaring with $T = 3$ squaring layers and $ 2^{T} = 8 $ atomic steps, shown for one voxel $ \vec p $. The deformation $ \Phi^{(t)} $ can be approximated at any time step $ t \in [0, 1] $ to within temporal precision $\epsilon$ by composing a subset of intermediate deformations. Note that in practice, larger $T$ are used resulting in an exponentially higher number of atomic steps and therefore a better approximation, e.g. $T = 7$ yielding $ 2^7 = 128 $ atomic steps. We calculate the deformation for all voxels $ \vec{p} $ in parallel.} \label{fig:arbtimestep}
 \end{figure}
 
 \subsection{Additional Loss Terms}
@@ -212,7 +212,7 @@ Similar to the age regressor, we also add a loss term based on a diagnosis class
 	\end{split}
 \end{equation}
 
-In addition to its use in this loss term, the classifier also serves as our baseline for the conversion prediction experiment as described in \autoref{sec:appconvpred}.
+In addition to its use in this loss term, the classifier is also used in the conversion prediction experiment as described in \autoref{sec:appconvpred}.
 
 \subsubsection*{Similarity Loss}
 Similar to \cite{baumgartner2018visual} and \cite{wegmayr2019generative}, we discourage the model from introducing drastic changes between the original image $x$ and the warped image $ G(x) = x \circ \Phi^{(t)} $ by imposing an $L_1$ loss on their difference
@@ -220,7 +220,7 @@ Similar to \cite{baumgartner2018visual} and \cite{wegmayr2019generative}, we dis
 	\mathcal{L}_{sim}( x, G ) = \norm{ x - G(x) }_1
 \end{equation}
 
-Note that we choose not to scale the similarity loss with respect to time step $t$. This is based on the observation that while the $L_1$ difference does increase for larger $t$, as depicted in \autoref{fig:l1plots}, it does so rather slowly, indicating that the majority of the difference is unrelated to aging. As a side note, the weak correlation between the $L_1$ difference and time step $t$ also indicates that the metric is not well suited to validate our the aging performance of our generative model.
+Note that we choose not to scale the similarity loss with respect to time step $t$. This is based on the observation that while the $L_1$ difference does increase for larger $t$, as depicted in \autoref{fig:l1plots}, it does so rather slowly, indicating that the majority of the difference is unrelated to aging. As a side note, the weak correlation between the $L_1$ difference and time step $t$ also indicates that the metric is not well suited to validate the aging performance of our generative model.
 
 \subsubsection*{Sparseness Loss}
 Finally, we encourage sparseness of the velocity field by imposing an $L_1$ loss on its magnitude
@@ -249,7 +249,7 @@ where $\mathcal{L}_{ws}$ is the generator's component of the Wasserstein loss fu
 Based on architectures applied to similar problems such as \cite{wegmayr2019generative} and \cite{baumgartner2018visual}, we expect the brain aging problem to be a more difficult task compared to brain registration as implemented in Voxelmorph. Therefore, we significantly increase the complexity of the UNet model as shown in \autoref{fig:archour}.
 %Furthermore, for computational reasons, we generate the velocity and intermediate deformation fields in half-size and upsample the final displacement to full-size before applying it to the input image $x$. Finally,
 Moreover, we experiment with a low resolution time-invariant deformation component, extracted from the UNet, to capture differences that are independent of time step $t$ such as misalignments introduced during scanning or preprocessing. More specifically, we fork the UNet's decoder into two distinct paths and bypass the scaling and squaring layers for one of them, resulting in two deformation maps to be applied to the input image $x$. Separating the deformation into two components is desirable as it allows ignoring changes independent of time, and therefore aging, during inference on unseen data.
-However, in preliminary experiments, this component appears to overpower the time-dependent deformations and as a consequence, is not included in our final model architecture.
+However, in preliminary experiments, this component appears to overpower the time-dependent deformations and as a consequence, it is not included in our final model architecture.
 
 \begin{figure}
 	\centering
@@ -269,7 +269,7 @@ In this context, we distinguish between progressive cases (pMCI) for which the d
 
 More specifically, a case is considered \textit{progressive} if there exists a pair of visits $(v_a, v_b)$ with examdates $(e_a, e_b)$ with $ e_b - e_a \geq \Delta $ and diagnoses $d_a = \text{MCI} $ and $d_b = \text{AD} $. Moreover, we require that the diagnosis does not revert after $v_b$, that is $ d_i = \text{AD} $ for all visits $v_i$ with $e_i > e_b$.
 
-Conversely, a case is considered \textit{stable} if its diagnosis does not change across the entire data set and its visits span a time period of at least $\Delta$, that is $ d_i = \text{MCI} $ for all visits $v_i$ and $ { \max_{v_i \in V(s)} e_i -  \min_{v_i \in V(s)} e_i \geq \Delta } $, where $V(s)$ is the set of visits of subject $s$.
+Conversely, a case is considered \textit{stable} if its diagnosis does not change across the entire data set and its visits span a time period of at least $\Delta$, that is $ d_i = \text{MCI} $ for all visits $v_i$ and $ { \max_{v \in V(s)} e -  \min_{v \in V(s)} e \geq \Delta } $, where $V(s)$ is the set of visits of subject $s$.
 
 Using our model, we can generate $\hat y^{(\Delta)} = x \circ \Phi^{(\Delta)}$ and use this prediction to estimate the probability of a conversion occuring.
 
@@ -280,7 +280,7 @@ Another interesting application is to generate predictions for larger time steps
 \subsection{Feature Attribution}
 Finally, similar to \cite{baumgartner2018visual}, our generator has potential applications in the area of visual feature attribution, that is, highlighting the parts of an image which are most strongly correlated to one of its labels, e.g. the subject's diagnosis.
 For instance, by training the model on different subsets of our data, such as exclusively AD or HC cases, we can model the different progressions and visualize their effects either on a single image or aggregated over subsets of our data.
-Finally, since our model is probabilistic, multiple different predictions for the same input image $x$ can be generated, which helps in getting an understanding of our model's uncertainty.
+Finally, since our model is probabilistic, multiple different predictions for the same input image $x$ can be generated, which helps in gaining an understanding of our model's uncertainty.
 
 \chapter{Experiments}
 
@@ -293,7 +293,7 @@ Each sample consists of a pair $(x_i, y_i)$ of $ 80 \times 96 \times 80 $ images
 We generate a total of 10'000 samples, using 60\% of the data set for training and 20\% for validation and testing each.
 
 \section{MRI Data}
-To train and validate our brain aging models, we use T1-weighted 3D MRI brain scans. We obtain a large data set of raw images with corresponding subject and image meta data from publically available sources and apply a preprocessing pipeline in order to extract, align and segment the brain tissue. Finally, we generate multiple different data sets tailored to our specific experiments.
+To train and validate our brain aging models, we use T1-weighted 3D MRI brain scans. We obtain a large data set of raw images with corresponding subject and image meta data from publically available sources and apply a preprocessing pipeline in order to align, extract, and segment the brain tissue. Finally, we generate multiple different data sets tailored to our specific experiments.
 
 \subsection{Data Sources}
 We use a data set consisting of 19'480 brain MRI scans obtained from the publicly available Alzheimer's Disease Neuroimaging Initiative (ADNI) \cite{jack2008alzheimer} and Australian Imaging Biomarkers and Lifestyle (AIBL) \cite{ellis2009australian} studies. The study data was collected over the course of a total of 9976 visits spanning a time period of 15 years and involving 2794 subjects.
@@ -310,7 +310,7 @@ Our data processing pipeline consists of three distint steps:
 \item Segmentation
 \end{itemize}
 
-Firstly, in the registration step we align the raw images to a common reference atlas\footnote{Reference: MNI152\_T1\_1mm} using linear transformations with 12 degrees of freedom. Secondly, we extract the brain from from the surrounding non-brain tissue in what is known as skull stripping or alternatively brain extraction. Both steps are performed utilizing the FSL toolkit \cite{jenkinson2012fsl}, using the \texttt{flirt} \cite{jenkinson2001global} \cite{jenkinson2002improved} and \texttt{bet}\footnote{Parameters: \texttt{-v -f 0.3 -g -0.1}} \cite{smith2002fast} \cite{jenkinson2005bet2} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast}\footnote{Parameters: \texttt{-t 1 -n 3 -l 20 -I 4 -O 4 -B}} \cite{zhang2001segmentation} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSM map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images as shown in \cite{de2018clinically}. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this approach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation, with smaller differences in intensity most likely representing noise. \autoref{fig:preproc} shows the entire preprocessing pipeline and all its intermediate steps applied to one sample from our data set.
+Firstly, in the registration step we align the raw images to a common reference atlas\footnote{Reference: MNI152\_T1\_1mm} using linear transformations with 12 degrees of freedom. Secondly, we extract the brain from the surrounding non-brain tissue in what is known as skull stripping or alternatively brain extraction. Both steps are performed utilizing the FSL toolkit \cite{jenkinson2012fsl}, using the \texttt{flirt} \cite{jenkinson2001global} \cite{jenkinson2002improved} and \texttt{bet}\footnote{Parameters: \texttt{-v -f 0.3 -g -0.1}} \cite{smith2002fast} \cite{jenkinson2005bet2} commands respectively. Thirdly, we segment each voxel into one of three classes, White Matter (WM), Gray Matter (GM) and Cerebrospinal Fluid (CSF) while simultaneously correcting a scanner-related image artifact known as the bias field using FSL's \texttt{fast}\footnote{Parameters: \texttt{-t 1 -n 3 -l 20 -I 4 -O 4 -B}} \cite{zhang2001segmentation} command. The results of this operation are three voxel-wise probability maps for the different classes and we then proceed to subtract the WM map from the GM map while dropping the CSF map. This results in a new image with a number of potentially benefitial properties, where all voxel values are restricted to the range [-1, 1] and can be directly compared across different images as shown in \cite{de2018clinically}. Note that the MR imaging process captures relative intensity differences and as a consequence, direct comparison of absolute values is in general not possible for raw or even unit gaussian normalized data. Furthermore, the operation enhances the structural contrast and removes low level variance in the image. We choose this approach based on the assumption, that most of the information relevant to the brain aging process is contained in the structural changes of the segmentation, with smaller differences in intensity most likely representing noise. \autoref{fig:preproc} shows the entire preprocessing pipeline and all its intermediate steps applied to one sample from our data set.
 
 %TODO(maybe cite paper showing that segmentation contains most data)
 
@@ -319,7 +319,7 @@ Firstly, in the registration step we align the raw images to a common reference 
 		\centering
 		\input{tikz/preproc}
 	}
-	\caption{Preprocessing pipeline visualized for a sample image.}
+	\caption{Preprocessing pipeline visualized for a sample MRI scan.}
 	\label{fig:preproc}
 \end{figure}
 
@@ -331,7 +331,7 @@ For computational reasons, we also perform downsampling with a factor of \sfrac{
 \label{sec:datsplitting}
 In order to run our experiments, we generate a number of data sets for the different settings. For the sake of notational brevity and conciseness, let $s$ denote one subject in our data set and let $v^s_i$ denote the $i$-th visit of subject s, with $V(s)$ denoting the temporally ordered set of visits $v^s_i \in V(s)$ of subject $s$, for $i \in 1 \ ..\ |V(s)|$. To improve readability, we generally omit $s$ unless required. For redundancy, MRI scans are usually performed twice resulting in two separate but very similar images for the same visit. Moreover, images taken at different magnetic field strength levels are available for some subjects. As a consequence, a visit $v_i$ typically consists of multiple images $x_{ik} \in I(v_i)$ along with the corresponding image meta data. Finally, the examdate $e_i$ and the subject age $a_i$ at time $e_i$ as well as the diagnosis $d_i$ are available for most visits.
 
-Our data sets are divided into five equal splits $ \{ \mathcal{S}_i \}_{i\ \in\ 0\;..\;4} $ of 20\% each which are used in various different configurations detailed in the corresponding experiment's section. We perform this split on a subject basis and do so globally, in the sense that if a subject appears in a specific data set, it is always assigned to the same split. In other words, for any pair of splits $ \mathcal{S}_i^A $ and $ \mathcal{S}_j^B $ taken from data sets $A$ and $B$, with $ i \neq j $ (for instance $\mathcal{S}^{\scaleto{Base}{5pt}}_0$ and $\mathcal{S}^{\scaleto{Pairs}{5pt}}_1$), the intersection $ { \mathcal{S}_i^A \cap \mathcal{S}_j^B = \varnothing } $ is guaranteed to be empty. In addition to these five splits, we keep a separate $\mathcal{S}_{conv}$ containing all images of subjects which are contained in the MCI conversion data set explained below.
+Our data sets are divided into five equal splits $ \{ \mathcal{S}_i \}_{i\ \in\ 0\;..\;4} $ of 20\% each which are used in various different configurations detailed in the corresponding experiment's section. We perform this split on a subject basis and do so globally, in the sense that if a subject appears in a specific data set, it is always assigned to the same split. In other words, for any pair of splits $ \mathcal{S}_i^A $ and $ \mathcal{S}_j^B $ taken from data sets $A$ and $B$, with $ i \neq j $ (for instance $\mathcal{S}^{\scaleto{Base}{5pt}}_0$ and $\mathcal{S}^{\scaleto{Pairs}{5pt}}_1$), the intersection $ { \mathcal{S}_i^A \cap \mathcal{S}_j^B = \varnothing } $ is guaranteed to be empty. In addition to these five splits, we keep a separate split $\mathcal{S}_{conv}$ containing all images of subjects which are contained in the MCI conversion data set explained below.
 
 \subsubsection*{Base Image Set} \label{sec:datsingles}
 The \textit{Base Image Set} forms the foundation for all other data sets. It consists of all images $x_{ik}$ and the meta data for the corresponding visits $v_i$ for which $e_i$ and $a_i$ are obtainable. The primary use for this set is in the training of our age regressor models.
@@ -374,14 +374,14 @@ The \textit{MCI/AD Set} consists of the images of all visits $v_i$ for which the
 
 We consider a visit $v_i$ \textit{firmly MCI} if $d_i$ as well as both the diagnoses of the previous and following visit $d_{i-1}$ and $d_{i+1}$ are $MCI$. Implicitly, this also means that we only consider subjects with at least three visits.
 
-Conversely, for a visit $v^s_i$ to be considered \textit{firmly AD}, we require that both $d^s_i$ and $d^s_{i-1}$, the current and previous diagnoses, are $AD$.
+Conversely, for a visit $v_i$ to be considered \textit{firmly AD}, we require that both $d_i$ and $d_{i-1}$, the current and previous diagnoses, are $AD$.
 
-Note that following these definitions, it is possible for one subject to have visits in both the MCI \textit{and} AD group, see \autoref{fig:mciad} for an illustrated example. An overview of the data set is shown in \autoref{tab:mciadset}.
+Note that following these definitions, it is possible for one subject to have visits in both the MCI \textit{and} AD group as illustrated in \autoref{fig:mciad}. An overview of this data set is shown in \autoref{tab:mciadset}.
 
 \begin{figure}[h]
 	\centering
 	\input{tikz/mciad}
-	\caption{Illustation of MCI and AD visits, \Large$\circ$\normalsize\;= MCI, $\times$ = AD}
+	\caption{Illustration of visits which are \textit{firmly MCI} and \textit{firmly AD}, \Large$\circ$\normalsize\;= MCI, $\times$ = AD}
 	\label{fig:mciad}
 \end{figure}
 
@@ -421,7 +421,7 @@ Note that following these definitions, it is possible for one subject to have vi
 
 \subsubsection*{Image Pairs Set}
 \label{sec:datpairs}
-The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject $s$ at two different visits $v_i$ and $v_j$. Of particular importance is the time step $t_{ij} = e_j - e_i$ between $v_i$ and $v_j$. We limit the maximum time step to 6 years for computational reasons explained in \autoref{sec:adaarbtimestep}. As visualized in \autoref{fig:timestephist}, the data set is biased towards smaller time steps with median of $1.53$, mean of $2.00$ and a standard deviation of $1.47$ years. To mitigate this, we calculate sample weights $w = {(| t - \bar t | + 1)}^{\sfrac{1}{2}}$, where $\bar t$ is the mean over all time steps $t$. The resulting distribution is shown in \autoref{fig:timestephist}. We also visualize the $L_1$ difference between $x$ and $y$ for all pairs in \autoref{fig:l1plots}.
+The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject $s$ at two different visits $v_i$ and $v_j$. Of particular importance is the time step $t_{ij} = e_j - e_i$ between $v_i$ and $v_j$. We limit the maximum time step to 6 years for computational reasons explained in \autoref{sec:adaarbtimestep}. As visualized in \autoref{fig:timestephist}, the data set is biased towards smaller time steps with median of $1.53$, mean of $2.00$ and a standard deviation of $1.47$ years. To mitigate this, we calculate sample weights $w = {(| t - \bar t | + 1)}^{\sfrac{1}{2}}$, where $\bar t$ is the mean over all time steps $t$. The resulting distribution is shown in \autoref{fig:timestephist}. We also visualize the $L_1$ difference between $x_i$ and $x_j$ for all pairs in \autoref{fig:l1plots}.
 
 \begin{table}[h]
 	\begin{center}
@@ -462,7 +462,7 @@ The \textit{Image Pairs Set} consists of pairs of images $(x_i, x_j)$ of subject
 		\caption{cropped}
 	\end{subfigure}
 	 
-	\caption{$L_1$ difference between image pairs $(x, y)$ from our data set for both the full-size and the cropped scans. We observe that while the difference increases with $t$, it does so rather slowly with slopes of 0.007 and 0.011 respectively.}
+	\caption{$L_1$ difference between image pairs $(x_i, x_j)$ from our pairs data set for both the full-size and the cropped scans. We observe that while the difference increases with $t$, it does so rather slowly with slopes of 0.007 and 0.011 respectively.}
 	\label{fig:l1plots}
 \end{figure}
 
@@ -572,7 +572,7 @@ Note that since we are performing these experiments on real image pairs, the res
 		\caption{mean and standard deviation}
 	\end{subfigure}
 	 
-	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.13 and a slope of 0.61. Note that the stripe patterns forming along the $x$-axis are a consequence of the study scheduling which mandates follow-up visits in intervals of six or twelve months.}
+	\caption{Age regressor estimates on 2651 validation samples from our pairs data set, comparing the estimated age difference to the ground truth time step. Linear regression yields an intercept of 0.13 and a slope of 0.61. Note that the stripe patterns forming along the $x$-axis are a consequence of the study scheduling which mandates follow-up visits in intervals of six or twelve months. We also show the rolling mean and standard deviation for the predicted time step $t$.}
 	\label{fig:expregddhat}
 \end{figure}
 
@@ -724,7 +724,7 @@ For the remaining hyperparameters, we use $\lambda_{kl} = 10$, $\lambda_{prior} 
 
 Note that the regressor and the classifier used as loss terms in configurations 2, 3, and 4 are trained on $\mathcal{S}_{valid}$ and evaluated on $\mathcal{S}_{train}$ in order to prevent them from overfitting on the generator training data.
 
-The model is trained using the Adam optimizer with $\alpha = 0.0001$, $\beta_1 = 0.0$, $\beta_2 = 0.9$ and $\epsilon = 10^{-7}$. Limited by GPU memory, we use batch size of 8 and train the model until convergence, in the the case of configurations 1, 5 and 6, and until $\mathcal{L}_{age}$ or $\mathcal{L}_{dx}$ display signs of overfitting for configurations 2, 3 and 4. Following the training procedure in \cite{goodfellow2014generative}, we alternate between training the critic and the generator on five and one batches respectively. Each such training step runs in roughly 5 seconds per batch or 0.6 seconds per sample. We present three sample generator outputs in \autoref{fig:expsamples}.
+The model is trained using the Adam optimizer with $\alpha = 0.0001$, $\beta_1 = 0.0$, $\beta_2 = 0.9$ and $\epsilon = 10^{-7}$. Limited by GPU memory, we use a batch size of 8 and train the model until convergence for configurations 1, 5 and 6, and until $\mathcal{L}_{age}$ or $\mathcal{L}_{dx}$ display signs of overfitting for configurations 2, 3, and 4. Following the training procedure in \cite{goodfellow2014generative}, we alternate between training the critic and the generator on five and one batches respectively. Each such training step runs in roughly 5 seconds per batch or 0.6 seconds per sample. We present generator outputs for three samples in \autoref{fig:expsamples}.
 
 \begin{figure}
 	%TODO(maybe flip time bar)
@@ -794,7 +794,7 @@ To evaluate the model's ability to generate follow-up images at fixed time steps
 		\caption{\ Configuration 2}
 	\end{subfigure}
 	 
-	\caption{Results of the fixed time step experiments for configurations 1 and 2. We generate follow-up images for time steps 1, 2, 4 and 6 on our test data and use the regressor to predict the age labels. Note that the standard deviation increases significantly for larger steps but does so less strongly for configuration 2 which uses an age regressor in its loss function.}
+	\caption{Results of the fixed time step experiments for configurations 1 and 2. We generate follow-up images for time steps 1, 2, 4, and 6 on our test data and use the regressor to predict the age labels. Note that the standard deviation increases significantly for larger steps but does so less strongly for configuration 2 which uses an age regressor in its loss function.}
 	\label{fig:expfixedhist}
 \end{figure}
 
@@ -805,7 +805,7 @@ To visualize the differences in aging between healthy subjects and subjects affe
 	\centering
 	\input{tikz/feat_ad}
 	\vspace{-15pt}
-	\caption{The center column consists of a series of real images from a \textbf{subject diagnosed with Alzheimer's Disease}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column consists of a series of real images from a \textbf{subject diagnosed with Alzheimer's Disease}, taken at one-year intervals, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:expfeatad}
 \end{figure}
 
@@ -813,7 +813,7 @@ To visualize the differences in aging between healthy subjects and subjects affe
 	\centering
 	\input{tikz/feat_hc}
 	\vspace{-15pt}
-	\caption{The center column consists of a series of real images from a \textbf{healthy subject}, taken at one-year intervals steps, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
+	\caption{The center column consists of a series of real images from a \textbf{healthy subject}, taken at one-year intervals, top to bottom. The two columns to the left show the predicted images at the same time steps using a model trained exclusively on healty patients, as well as the difference maps with respect to the base image. Similarly, the two columns to the right show the predicted images using a model exclusively trained on patients affected by Alzheimer's Disease.}
 	\label{fig:expfeathc}
 \end{figure}
 
@@ -853,12 +853,12 @@ Superior results could likely be obtained by iteratively applying deformations f
 	\centering
 	\input{tikz/longterm}
 	\vspace{-15pt}
-	\caption{Sequence of a base image $x$ and images generated for time steps of 2, 4, 6, 8 and 10 years, as well as the corresponding difference maps to the base image. We pick two samples which represent common outcomes in our data sets and use configuration 1 to generate the predictions.}
+	\caption{Sequence of a base image $x$ and images generated for time steps of 2, 4, 6, 8, and 10 years, as well as the corresponding difference maps to the base image. We pick two samples which represent common outcomes in our data sets and use configuration 1 to generate the predictions.}
 	\label{fig:explongterm}
 \end{figure}
 
 \subsubsection*{Conversion Prediction}
-As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model. We then predict $p_{AD}(G(x))$ using a diagnosis classifier and apply thresholding to classify the subject as progressive or stable.
+As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model. We then predict $p_{AD}(G(x))$ using a diagnosis classifier and apply thresholding to classify each subject as progressive or stable.
 
 Based on the results of the Follow-Up and Fixed Time Step Prediction experiments, we calculate adjusted time steps for configurations 1 and 2 according to their aging performance and evalute the conversion probability on images predicted using the adjusted time step. As an example, for $t = 4$, configuration 2 is known to produce images that, to the age regressor, appear aged by 4.01 years. However, for the same $t$, the time step estimated by the age regressor on the real image pairs is significantly lower at a value 2.53 years. Therefore, we rescale $t$ to match the value observed on the real image pairs in order to obtain more realistic predictions.
 
@@ -896,7 +896,7 @@ Given a set of images $\{x\}$ from our conversion data set, we independently cal
 	\item We split the conversion data set into 5 balanced splits $\{\mathcal{T}_i\}_{i\ \in\ 0\ ..\ 4}$ and calculate $\tau_i$ for each split as the threshold which maximizes the target metric on $\{\mathcal{T}_j\}_{i \neq j}$.
 	\item We calculate the metrics for each split $\mathcal{T}_i$ using the corresponding $\tau_i$ and take the mean over all splits
 	\item We repeat steps 2 and 3 five times and take the mean for both metrics
-	\item We repeat steps 1 to 4 for each of the five best classifier in \autoref{tab:clfcrossval} and again take the mean
+	\item We repeat steps 1 to 4 for each of the five best classifiers in \autoref{tab:clfcrossval} and once again take the mean
 \end{enumerate}
 
 We calculate the balanced accuracy and $\text{F}_1$-score on the set of base images $x$ as a baseline and similarly on the set of target images $y$ as an upper bound. Finally, we calculate the metrics for images generated using configurations 1 to 4 and report the results in \autoref{tab:expconv}.
@@ -956,15 +956,15 @@ We calculate the balanced accuracy and $\text{F}_1$-score on the set of base ima
 		\caption*{$\text{F}_1$-Score}
 		%\label{tab:expconvf1score}
 	\end{center}
-	\caption{Results of the MCI conversion prediction experiment. We calculate the results for the real images $x$ and $y$ and use them as our baseline and upper bound respectively. The configurations annotated with a star use adjusted time steps for the image generation.}
+	\caption{Results of the MCI conversion prediction experiment. We calculate the results for the real images $x$ and $y$ and use them as our baseline and upper bound respectively. The configurations annotated with a star use adjusted time steps in the image generation step.}
 	\label{tab:expconv}
 \end{table}
 
-For $t = 4$, configuration 1 yields the best results for both metrics with an improvement over the baseline of 2.39\% for the accuracy and 3.97\% for the $\text{F}_1$-score. Using the adjusted time step of $t = 3$ results in a slight improvement of the mean metrics (2.95\% and 5.07\%). For configuration 2, the adjusted time step $t = 2$ sharply increases both metrics (2.62\% and 4.42\%) while also decreasing the standard deviation.
+For $t = 4$, configuration 1 yields the best results for both metrics with an improvement over the baseline of 2.39\% for the accuracy and 3.97\% for the $\text{F}_1$-score. Using the adjusted time step of $t = 3$ results in a slight improvement of the mean metrics (2.95\% and 5.07\%). For configuration 2, using the adjusted time step $t = 2$ sharply increases both metrics (2.62\% and 4.42\%) while also decreasing the standard deviation.
 
 \chapter{Discussion}
 
-Using the age regressor as part of the loss objective has a clear impact on the model's performance, however, the same does not appear to be the case for the diagnosis classifier. While this may be a consequence of the more limited amount of training data available to these configurations, the diagnosis classifier also appears to be very sensitive to both the data splitting as well as its starting conditions. As such, it might not be a suitable taget to be used as part of the objective function. Most probably, this instability is a consequence of the fairly limited number of training samples available to the classifier, which could be addressed by incorporating additional image data from other studies. As touched upon in \autoref{sec:datpreproc}, our use of segmentation-derived images opens up the possibility of using different image modalities such as PD or T2-weighted MRI scans which greatly expands the number of viable data sources.
+Using the age regressor as part of the loss objective has a clear impact on the model's performance, however, the same does not appear to be the case for the diagnosis classifier. While this may be a consequence of the more limited amount of training data available to these configurations, the diagnosis classifier also appears to be very sensitive to both the data splitting as well as its starting conditions. As such, it might not be a suitable target to be used as part of the objective function. Most probably, this instability is a consequence of the fairly limited number of training samples available to the classifier, which could be addressed by incorporating additional image data from other studies. As touched upon in \autoref{sec:datpreproc}, our use of segmentation-derived images opens up the possibility of using different image modalities such as PD or T2-weighted MRI scans which greatly expands the number of viable data sources.
 We also note that downsampling the images may have a significant negative performance impact on the classifier and that therefore, better results could be obtained using architectures operating on full-size and uncropped images.
 Beyond more extensive and higher resolution image data sets, additional data modalities such as cognitive test results as well as biomarkers could be incorporated. Furthermore, both the generator and the classifier might benefit from being trained on longitudinal data, that is, data from multiple visits.
 
