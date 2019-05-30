@@ -26,10 +26,14 @@
 	\draw[->, very thick] (fli) -- node[above=25pt, right=0pt, rotate=90]{\texttt{\ mask}} (msk);
 	\draw[->, very thick] (msk) -- node[above=25pt, right=0pt, rotate=90]{\texttt{\ bet}}  (bet);
 	\draw[->, very thick] (bet.south) -- (pv1.north);
-	\draw[->, very thick] (bet.south) -- (pv2.north);
-	\draw[->, very thick] (bet.south) -- node[left=10pt]{\texttt{fast}} (res.north);
+	\draw[->, very thick] (bet.south) -- node[left=0pt, fill=white, inner sep=3pt]{\quad \texttt{fast}} (pv2.north);
+	\draw[->, very thick] (bet.south) -- (res.north);
 	\draw[->, very thick] (pv1) -- node[left=10pt]{\texttt{subtract}} (sub);
 	\draw[->, very thick] (pv2) -- (sub);
+
+	\node[below = -0.5 of res.south] (lres) {\small T1};
+	\node[below = -0.5 of pv1.south] (lpv1) {\small WM};
+	\node[below = -0.5 of pv2.south] (lpv2) {\small GM};
 
 
 \end{tikzpicture}

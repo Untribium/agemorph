@@ -1,13 +1,16 @@
 \begin{abstract}
-Average human life expectancy has increased dramatically over the last century, leading to a significant rise in the prevalence of aging-related neurodegenerative diseases. Alzheimer's Disease in particular is one of the only leading causes of death still on the rise. As such, advancing our understanding of the brain aging process as well as early stage detection of Alzheimer's Disease onset is a important area of research.
-In our work, we focus on modeling the brain aging process on Magnetic Resonance Imaging (MRI) scans. To that end, we express the aging process as a diffeomorphic deformation and introduce a conditional Generative Adversarial Network (GAN) architecture to predict the future state of a brain. Specifically, our model learns a stationary velocity field which is subsequently integrated using the scaling and squaring method, for which we propose an extension to handle arbitrary time steps both in training and inference.
-Beyond visual inspection, we validate our model's performance by applying a pre-trained age regressor to the generated outputs. Furthermore, we use our model to predict the probabilty of patients with Mild Cognitive Impairment converting to Alzheimer's Disease.
+Average human life expectancy has increased dramatically over the last century, leading to a significant rise in the prevalence of aging-related neurodegenerative diseases. Alzheimer's Disease in particular is one of the only leading causes of death still on the rise. As such, advancing our understanding of the brain aging process as well as early stage detection of Alzheimer's Disease onset is an important area of research.
+In our work, we focus on modeling the brain aging process as observed in Magnetic Resonance Imaging (MRI) scans. To that end, we express the aging process as a diffeomorphic deformation and introduce a conditional Generative Adversarial Network (GAN) architecture to predict the future state of a brain. Specifically, our model learns a stationary velocity field which is subsequently integrated using the scaling and squaring method, for which we propose an modification to handle arbitrary time steps both in training and inference.
+Beyond visual inspection, we use a pre-trained age regressor to validate our model's performance by estimating the age label of its outputs and comparing them to the ground truth labels. Furthermore, we apply the generative aging model in the context of dementia prognosis, i.e. estimating the probability of a person with Mild Cognitive Impairment deteriorating to Alzheimer's Disease.
+
 
 \end{abstract}
 
 \begin{comment}
 
-Formulate express state as a diffeomorphic deformation.
+	by applying a pre-trained age regressor to the generated outputs. Furthermore, we use our model to predict the probabilty of patients with Mild Cognitive Impairment converting to Alzheimer's Disease.
+
+	Formulate express state as a diffeomorphic deformation.
 
 we propose an extension of the scaling and squaring method for arbitrary time steps
 

@@ -1,1 +1,13 @@
 \chapter{Conclusion}
+In this thesis, we model the brain aging process as a diffeomorphic deformation.
+We learn to generate a stationary velocity field from an input image using a UNet-derived generator architecture trained in adverserial fashion.
+To integrate the velocity field to the appropriate time step, we use the scaling and squaring method which we modify to be able to produce deformations for arbitrary time steps. Specifically, using the properties of the Lie algebra, we obtain the desired time step as the composition over a subset of intermediate deformations produced by the scaling and squaring method. With this modification, our model can be trained on image pairs irrespective of the time steps, allowing it to make the best use of the training data as well as improving its ability to generalize for arbitrary time steps.
+
+To validate that our model is indeed capable of capturing the progressive nature of the aging process, we propose to estimate age labels on its outputs and compare them to the ground truth labels.
+To that end, we train a regressor in the form of a convolutional neural network to predict an age label for an MRI scan.
+We find that while the mean loss of our regressor on single images appears prohibitively large for the task at hand, it performs significantly better in the setting of estimating the age difference of a pair of images.
+Accordingly, we use the age regressor to predict the time steps on real and generated image pairs and find this to be a meaningful metric for the generator's performance.
+Furthermore, we also explore the use of an age regressor as a part of the generator's loss function and observe a decrease in the standard deviation of the predicted age labels.
+
+Finally, we apply our generative model to the MCI conversion prediction task and report cautiously positive results.
+Similar to the age regressor, we also train a diagnosis classifier to be used as a loss term in the generator but observe no improvement. In fact, we see a decrease in performance, but expect this to be a consequence of the reduced amount of training data available to the model in this setting.
