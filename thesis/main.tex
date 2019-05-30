@@ -46,7 +46,7 @@ The model uses a variational inference method to generate a stationary displacem
 
 Spatial smoothness of z is is encouraged by letting ${\Sigma_z^{-1} = \Lambda_z = \lambda L}$ where $\Lambda_z$ is a precision matrix, $L$ is the Laplacian of a neighborhood graph defined as $L = D - A$, with graph degree matrix $D$ and voxel adjacency matrix $A$, and $\lambda$ denotes a parameter controlling the scale of the velocity field.
 
-The generator's output is modelled as a gaussian distribution with $y$, the target image, as its mean and a standard deviation of $\sigma$. In other words, the warped image $x$ is interpreted as a noisy oberservation of the target image $y$
+The generator's output is modeled as a gaussian distribution with $y$, the target image, as its mean and a standard deviation of $\sigma$. In other words, the warped image $x$ is interpreted as a noisy oberservation of the target image $y$
 \begin{equation}
 	p(y|z;x) = \mathcal{N}(y; x \circ \Phi_z, \sigma^2 \mathbbm{I})
 \end{equation}
@@ -792,7 +792,7 @@ To evaluate the model's ability to generate follow-up images at fixed time steps
 		\caption{\ Configuration 2}
 	\end{subfigure}
 	 
-	\caption{Results of the fixed time step experiments for configurations 1 and 2. We predict follow-up images at time steps 1, 2, 4 and 6 and present the results as a histogram. Note that the standard deviation increases significantly for larger steps but does so less strongly for configuration 2 which uses an age regressor in its loss function.}
+	\caption{Results of the fixed time step experiments for configurations 1 and 2. We generate follow-up images for time steps 1, 2, 4 and 6 on our test data and use the regressor to predict the age labels. Note that the standard deviation increases significantly for larger steps but does so less strongly for configuration 2 which uses an age regressor in its loss function.}
 	\label{fig:expfixedhist}
 \end{figure}
 
@@ -858,7 +858,7 @@ Superior results could likely be obtained by iteratively applying deformations f
 \subsubsection*{Conversion Prediction}
 As described in \autoref{sec:appconvpred}, we evaluate the performance of our generative model on the MCI conversion prediction task. Given an image pair $(x, y)$ we generate $G(x)$ with time step $t = 4$ using our generative model. We then predict $p_{AD}(G(x))$ using a diagnosis classifier and apply thresholding to classify the subject as progressive or stable.
 
-Based on the results of the Follow-Up and Fixed Time Step Prediction experiments, we calculate adjusted time steps for each model according to its aging performance and evalute the conversion probability on the images predicted using the adjusted time step. As an example, for $t = 4$, configuration 2 is known to produce images that, to the age regressor, appear aged by 4.01 years. However, for the same $t$, the time step estimated by the age regressor on the real image pairs is significantly lower at a value 2.53 years. Therefore, we rescale $t$ to match the value observed on the real image pairs in order to obtain more realistic predictions.
+Based on the results of the Follow-Up and Fixed Time Step Prediction experiments, we calculate adjusted time steps for configurations 1 and 2 according to their aging performance and evalute the conversion probability on images predicted using the adjusted time step. As an example, for $t = 4$, configuration 2 is known to produce images that, to the age regressor, appear aged by 4.01 years. However, for the same $t$, the time step estimated by the age regressor on the real image pairs is significantly lower at a value 2.53 years. Therefore, we rescale $t$ to match the value observed on the real image pairs in order to obtain more realistic predictions.
 
 Keeping in mind the imbalanced nature of the conversion data set, we use balanced accuracy and $\text{F}_1$-score as our metrics
 
@@ -872,12 +872,20 @@ Keeping in mind the imbalanced nature of the conversion data set, we use balance
 	\end{split}
 \end{equation}
 where
-\begin{equation*}
-	\begin{split}
-	\text{precision} =& \ \frac{TP}{TP + FP} \\[8pt]
-		\text{recall} =& \ \frac{TP}{TP + FN} \\[8pt]
-	\end{split}
-\end{equation*}
+\begin{center}
+	\vspace{-40pt}
+	\parbox{0.7\linewidth}{
+		\begin{multicols}{2}
+			\begin{equation*}
+				\text{precision} = \ \frac{TP}{TP + FP}
+			\end{equation*}\break
+			\begin{equation*}
+				\text{recall} = \ \frac{TP}{TP + FN}
+			\end{equation*}
+		\end{multicols}
+	}
+\end{center}
+
 with $TP$ = true positives, $TN$ = true negatives, $FP$ = false positives and $FN$~=~false negatives.
 
 Given a set of images $\{x\}$ from our conversion data set, we independently calculate the balanced conversion accuracy and the $\text{F}_1$-score as follows:
@@ -946,9 +954,11 @@ We calculate the balanced accuracy and $\text{F}_1$-score on the set of base ima
 		\caption*{$\text{F}_1$-Score}
 		%\label{tab:expconvf1score}
 	\end{center}
-	\caption{Results of the MCI Conversion Prediction experiment. The configurations annotated with a star use adjusted time steps for the image generation.}
+	\caption{Results of the MCI conversion prediction experiment. We calculate the results for the real images $x$ and $y$ and use them as our baseline and upper bound respectively. The configurations annotated with a star use adjusted time steps for the image generation.}
 	\label{tab:expconv}
 \end{table}
+
+For $t = 4$, configuration 1 yields the best results for both metrics with an improvement over the baseline of 2.39\% for the accuracy and 3.97\% for the $\text{F}_1$-score. Using the adjusted time step of $t = 3$ results in a slight improvement of the mean metrics (2.95\% and 5.07\%). For configuration 2, the adjusted time step $t = 2$ sharply increases both metrics (2.62\% and 4.42\%) while also decreasing the standard deviation.
 
 \chapter{Discussion}
 
