@@ -1,0 +1,41 @@
+%% Custom commands
+%% ===============
+
+%% Special characters for number sets, e.g. real or complex numbers.
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\K}{\mathbb{K}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\X}{\mathbb{X}}
+\newcommand{\E}{\mathbb{E}}
+
+%% Fixed/scaling delimiter examples (see mathtools documentation)
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}
+
+%% Use the alternative epsilon per default and define the old one as \oldepsilon
+\let\oldepsilon\epsilon
+\renewcommand{\epsilon}{\ensuremath\varepsilon}
+
+%% Also set the alternate phi as default.
+\let\oldphi\phi
+\renewcommand{\phi}{\ensuremath{\varphi}}
+
+\newcommand{\xtest}{x^1}
+\newcommand{\xretest}{x^2}
+\newcommand{\xitest}{x_i^1}
+\newcommand{\xiretest}{x_i^2}
+\newcommand{\xtilde}{\tilde{x}}
+\newcommand{\xtzero}{x^{t_0}}
+\newcommand{\xtone}{x^{t_1}}
+\newcommand{\tzero}{t_0}
+\newcommand{\tone}{t_1}
+\newcommand{\xtonetilde}{\tilde{x}^{t_1}}
+\newcommand{\rwgan}{RWGAN }
+
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\newcommand{\rpm}{\raisebox{.2ex}{$\scriptstyle\pm$}}

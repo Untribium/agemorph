@@ -1,0 +1,16 @@
+
+\begin{tikzpicture}
+
+	\coordinate (ref) at (0, 0);
+
+	\node[below = 0.1 of ref] (nn) {\includegraphics[width=\textwidth]{samples}};
+
+	\node[above right = 0.05 and 1.2 of nn.north west] (x) {$x\vphantom{\norm{v}_2}$};
+	\node[right = 2.6 of x.west] (y)	{$y\vphantom{\norm{v}_2}$};
+	\node[right = 2.6 of y.west] (yhat)	{$\hat y\vphantom{\norm{v}_2}$};
+	\node[right = 1.3 of yhat.west] (t)	{$t\vphantom{\norm{v}_2}$};
+	\node[right = 1.3 of t.west] (v)	{$v\vphantom{\norm{v}_2}$};
+	\node[right = 2.4 of v.west] (mag)	{$\norm{v}_2$};
+
+
+\end{tikzpicture}

@@ -1,0 +1,53 @@
+\begin{tikzpicture}[scale=4, line/.style={>=latex}] 
+	\coordinate (p00) at (1.5, 0.1);
+	\coordinate (v100) at (0.05, 0.35);
+	\coordinate (p01) at ($(p00) + (v100)$);
+	\coordinate (v101) at (-0.1, 0.3);
+	\coordinate (p02) at ($(p01) + (v101)$);
+	\coordinate (v102) at (-0.35, 0.15);
+	\coordinate (p03) at ($(p02) + (v102)$);
+	\coordinate (v103) at (-0.35, -0.15);
+	\coordinate (p04) at ($(p03) + (v103)$);
+	\coordinate (v104) at (-0.35, 0.05);
+	\coordinate (p05) at ($(p04) + (v104)$);
+	\coordinate (v105) at (-0.25, 0.25);
+	\coordinate (p06) at ($(p05) + (v105)$);
+	\coordinate (v106) at (-0.1, 0.375);
+	\coordinate (p07) at ($(p06) + (v106)$);
+	\coordinate (v107) at (0.1, 0.35);
+	\coordinate (p08) at ($(p07) + (v107)$);
+
+	\node[
+		opacity=0.25,
+		anchor=south west, 
+		inner sep=0pt
+	] at (-0.2,-0.2) {\includegraphics[width=88mm]{mri_patch_11}}; 
+
+	\draw[step=0.2, color=black!10] (-0.2, -0.2) grid (2, 2);
+	%\draw[->, line] (-0.25, 0) -- (2.05, 0);
+	%\draw[->, line] (0, -0.25) -- (0, 2.05);
+	
+	% v4
+	\draw[->, line, color=teal, very thick, densely dashed] (p03) -- node [right=12pt] {$\vec{v_4}(\vec p \circ \Phi^{(\sfrac{3}{8})})$} (p07);
+
+	% v2
+	\draw[->, line, color=violet, very thick, densely dashed] (p01) -- node [below left] {$\vec{v_2}(\vec p \circ \Phi^{(\sfrac{1}{8})})$} (p03);
+	%\draw[->, line, color=violet, very thick, dashed] (p03) -- (p05);
+	%\draw[->, line, color=violet, very thick, dashed] (p05) -- (p07);
+
+	% v1
+	\draw[->, line, color=black, very thick] (p00) -- node [right=3pt, at end] {$\vec p \circ \Phi^{(\sfrac{1}{8})}$}
+							  node [left=2pt, midway] {$\vec{v_1}(\vec p)$}
+							  node [below right=-2pt, at start] {$\vec p$} (p01);
+	\draw[->, line, color=black, very thick] (p01) -- node [right=6pt, at end] {$\vec p \circ \Phi^{(\sfrac{1}{4})}$} (p02);
+	\draw[->, line, color=black, very thick] (p02) -- (p03);
+	\draw[->, line, color=black, very thick] (p03) -- (p04);
+	\draw[->, line, color=black, very thick] (p04) -- (p05);
+	\draw[->, line, color=black, very thick] (p05) -- (p06);
+	\draw[->, line, color=black, very thick] (p06) -- node [above=3pt, right=8pt, at end] {$\vec p \circ \Phi^{(\sfrac{7}{8})} =
+		((\vec p \circ \Phi^{(\sfrac{1}{8})}) \circ \Phi^{(\sfrac{1}{4})}) \circ \Phi^{(\sfrac{1}{2})}$} (p07);
+	\draw[->, line, color=black, very thick] (p07) -- node [right=5pt, at end] {$\vec p \circ \Phi^{(1)}$} (p08);
+
+\end{tikzpicture}
+
+
